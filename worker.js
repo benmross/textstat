@@ -153,7 +153,7 @@ function makeStats() {
     emojis: new Map(),
     firstTs: null,
     lastTs: null,
-    longestBody: { len: 0, preview: '', contact: '', sent: false, ts: 0 },
+    longestBody: { len: 0, preview: '', contact: '', photo: null, sent: false, ts: 0 },
     skippedNoText: 0,
   };
 }
@@ -201,7 +201,20 @@ function recordMessage(stats, kind, isSent, ts, address, contactName, text, isGr
     const groupKey = address || ('group:' + (contactName || 'unknown'));
     let g = stats.groups.get(groupKey);
     if (!g) {
-      g = { name: contactName || '(group)', count: 0, participants: address ? address.split('~').length : 0 };
+      const participantAddrs = address ? address.split('~').map(a => a.trim()).filter(Boolean) : [];
+      const participantPhotos = stats.nameMap
+        ? participantAddrs.map(a => lookupContactPhoto(a, stats.nameMap)).filter(Boolean)
+        : [];
+      const participantNames = stats.nameMap
+        ? participantAddrs.map(a => lookupContactName(a, stats.nameMap) || a)
+        : participantAddrs.slice();
+      g = {
+        name: contactName || '(group)',
+        count: 0,
+        participants: participantAddrs.length,
+        participantPhotos,
+        participantNames,
+      };
       stats.groups.set(groupKey, g);
     }
     g.count++;
@@ -210,10 +223,17 @@ function recordMessage(stats, kind, isSent, ts, address, contactName, text, isGr
     let c = stats.contacts.get(key);
     if (!c) {
       const display = (contactName && contactName !== '(Unknown)') ? contactName : (address || 'unknown');
-      c = { displayName: display, sent: 0, recv: 0, total: 0, charsSent: 0, charsRecv: 0 };
+      const photo = stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null;
+      c = { displayName: display, sent: 0, recv: 0, total: 0, charsSent: 0, charsRecv: 0, photo, address: address || '' };
       stats.contacts.set(key, c);
-    } else if ((!c.displayName || c.displayName === '(Unknown)') && contactName && contactName !== '(Unknown)') {
-      c.displayName = contactName;
+    } else {
+      if ((!c.displayName || c.displayName === '(Unknown)') && contactName && contactName !== '(Unknown)') {
+        c.displayName = contactName;
+      }
+      if (!c.photo && stats.nameMap) {
+        const photo = lookupContactPhoto(address, stats.nameMap);
+        if (photo) c.photo = photo;
+      }
     }
     if (isSent) { c.sent++; c.charsSent += len; } else { c.recv++; c.charsRecv += len; }
     c.total++;
@@ -228,6 +248,7 @@ function recordMessage(stats, kind, isSent, ts, address, contactName, text, isGr
         len,
         preview: text.length > 240 ? text.slice(0, 240) + '…' : text,
         contact: contactName || address || '',
+        photo: stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null,
         sent: isSent, ts,
       };
     }
@@ -311,7 +332,7 @@ self.onmessage = async (e) => {
       if (isSqliteMagic(headBytes)) {
         await parseSqlite(msg.file, nameMap);
       } else {
-        await parseFile(msg.file); // SMS&R XML already has contact_name attrs
+        await parseFile(msg.file, nameMap); // SMS&R XML has contact_name; photos come from vCard
       }
     } catch (err) {
       self.postMessage({ type: 'error', error: (err && err.stack) || String(err) });
@@ -330,9 +351,52 @@ async function parseContactsFile(file) {
   return parseVcard(text);
 }
 
-function nameMapAdd(map, key, name) {
-  if (!key || !name) return;
-  if (!map.has(key)) map.set(key, name);
+function nameMapAdd(map, key, entry) {
+  if (!key || !entry) return;
+  const existing = map.get(key);
+  if (!existing) {
+    map.set(key, entry);
+  } else {
+    // merge: prefer first name we saw, but fill in photo if missing
+    if (!existing.photo && entry.photo) existing.photo = entry.photo;
+  }
+}
+
+// Build a data: URL from a vCard PHOTO line's header + value. We accept:
+//   PHOTO;ENCODING=b;TYPE=JPEG:<base64>                 (vCard 3.0)
+//   PHOTO;ENCODING=BASE64;TYPE=JPEG:<base64>            (variant)
+//   PHOTO;TYPE=JPEG;ENCODING=BASE64:<base64>            (variant)
+//   PHOTO:data:image/jpeg;base64,<base64>               (vCard 4.0)
+//   PHOTO;VALUE=URI:data:image/jpeg;base64,<base64>     (vCard 4.0)
+// Returns a data URL string, or null if we can't build one.
+function buildPhotoDataUrl(paramStr, value) {
+  if (!value) return null;
+  // Already a data URL
+  const trimmed = value.trim();
+  if (trimmed.startsWith('data:')) return trimmed;
+  // Otherwise assume base64 payload; figure out mime from TYPE= param
+  // (PARAM string looks like ";ENCODING=BASE64;TYPE=JPEG")
+  const p = (paramStr || '').toUpperCase();
+  if (p.indexOf('BASE64') < 0 && p.indexOf('=B') < 0 && p.indexOf(';B') < 0 && p.indexOf(':B') < 0) {
+    // No explicit base64 marker — bail (could be URL or unsupported)
+    if (/^https?:\/\//i.test(trimmed)) return trimmed;
+    // Still try base64 as a last resort below
+  }
+  let mime = 'image/jpeg';
+  const typeMatch = p.match(/TYPE=([A-Z0-9+\-]+)/);
+  if (typeMatch) {
+    const t = typeMatch[1].toLowerCase();
+    if (t === 'jpeg' || t === 'jpg') mime = 'image/jpeg';
+    else if (t === 'png') mime = 'image/png';
+    else if (t === 'gif') mime = 'image/gif';
+    else if (t === 'webp') mime = 'image/webp';
+    else if (t.startsWith('image/')) mime = t;
+    else mime = 'image/' + t;
+  }
+  // Strip whitespace/newlines that may linger in the base64 payload
+  const clean = trimmed.replace(/\s+/g, '');
+  if (!clean) return null;
+  return 'data:' + mime + ';base64,' + clean;
 }
 
 function parseVcard(text) {
@@ -344,20 +408,22 @@ function parseVcard(text) {
   for (const raw of lines) {
     const line = raw;
     if (line.startsWith('BEGIN:VCARD')) {
-      cur = { fn: null, n: null, phones: [], emails: [] };
+      cur = { fn: null, n: null, phones: [], emails: [], photo: null };
     } else if (line.startsWith('END:VCARD')) {
       if (cur) {
         const name = cur.fn || cur.n;
-        if (name) {
-          for (const p of cur.phones) nameMapAdd(map, 'p:' + normalizePhone(p), name);
-          for (const e of cur.emails) nameMapAdd(map, 'e:' + e.toLowerCase().trim(), name);
+        if (name || cur.photo) {
+          const entry = { name: name || '', photo: cur.photo || null };
+          for (const p of cur.phones) nameMapAdd(map, 'p:' + normalizePhone(p), entry);
+          for (const e of cur.emails) nameMapAdd(map, 'e:' + e.toLowerCase().trim(), entry);
         }
       }
       cur = null;
     } else if (cur) {
       const colon = line.indexOf(':');
       if (colon < 0) continue;
-      const key = line.substring(0, colon).toUpperCase();
+      const rawKey = line.substring(0, colon);
+      const key = rawKey.toUpperCase();
       const val = line.substring(colon + 1);
       if (key === 'FN' || key.startsWith('FN;')) {
         if (!cur.fn) cur.fn = unescapeVcard(val).trim();
@@ -373,6 +439,13 @@ function parseVcard(text) {
         cur.phones.push(val);
       } else if (key === 'EMAIL' || key.startsWith('EMAIL;') || key.startsWith('EMAIL,')) {
         cur.emails.push(val);
+      } else if (key === 'PHOTO' || key.startsWith('PHOTO;')) {
+        if (!cur.photo) {
+          const semi = rawKey.indexOf(';');
+          const params = semi >= 0 ? rawKey.substring(semi) : '';
+          const photo = buildPhotoDataUrl(params, val);
+          if (photo) cur.photo = photo;
+        }
       }
     }
   }
@@ -405,7 +478,7 @@ async function parseAddressBookDb(file) {
     `);
     while (stmt.step()) {
       const row = stmt.getAsObject();
-      if (row.name && row.phone) nameMapAdd(map, 'p:' + normalizePhone(row.phone), row.name);
+      if (row.name && row.phone) nameMapAdd(map, 'p:' + normalizePhone(row.phone), { name: row.name, photo: null });
     }
     stmt.free();
   } catch (e) { /* table may not exist */ }
@@ -420,7 +493,7 @@ async function parseAddressBookDb(file) {
     `);
     while (stmt.step()) {
       const row = stmt.getAsObject();
-      if (row.name && row.email) nameMapAdd(map, 'e:' + row.email.toLowerCase().trim(), row.name);
+      if (row.name && row.email) nameMapAdd(map, 'e:' + row.email.toLowerCase().trim(), { name: row.name, photo: null });
     }
     stmt.free();
   } catch (e) { /* table may not exist */ }
@@ -433,6 +506,16 @@ function lookupContact(handle, nameMap) {
   const isEmail = handle.indexOf('@') > 0;
   const key = isEmail ? 'e:' + handle.toLowerCase() : 'p:' + normalizePhone(handle);
   return nameMap.get(key) || null;
+}
+
+function lookupContactName(handle, nameMap) {
+  const e = lookupContact(handle, nameMap);
+  return e && e.name ? e.name : null;
+}
+
+function lookupContactPhoto(handle, nameMap) {
+  const e = lookupContact(handle, nameMap);
+  return e && e.photo ? e.photo : null;
 }
 
 // ---------- file format detection ----------
@@ -542,6 +625,7 @@ async function parseSqlite(file, nameMap) {
   self.postMessage({ type: 'progress', pct: 40, bytes: totalSize / 2, total: totalSize, count: 0, msg: 'querying messages…' });
 
   const stats = makeStats();
+  stats.nameMap = nameMap || null;
 
   const sql = `
     SELECT
@@ -649,7 +733,7 @@ function processSqliteRow(row, stats, nameMap) {
     contactName = chatName || '(group)';
   } else {
     address = handleId || chatId;
-    contactName = (nameMap && lookupContact(address, nameMap)) || address;
+    contactName = (nameMap && lookupContactName(address, nameMap)) || address;
   }
 
   // route through the same recording pipeline as the XML path
@@ -688,6 +772,7 @@ function recordMessageImsg(stats, isSent, ts, address, contactName, text, isGrou
         len,
         preview: text.length > 240 ? text.slice(0, 240) + '…' : text,
         contact: contactName || address || '',
+        photo: stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null,
         sent: isSent, ts,
       };
     }
@@ -723,7 +808,13 @@ function bucketMessage(stats, isSent, ts, address, contactName, isGroup) {
     const groupKey = address || ('group:' + (contactName || 'unknown'));
     let g = stats.groups.get(groupKey);
     if (!g) {
-      g = { name: contactName || '(group)', count: 0, participants: 0 };
+      g = {
+        name: contactName || '(group)',
+        count: 0,
+        participants: 0,
+        participantPhotos: [],
+        participantNames: [],
+      };
       stats.groups.set(groupKey, g);
     }
     g.count++;
@@ -732,8 +823,12 @@ function bucketMessage(stats, isSent, ts, address, contactName, isGroup) {
     let c = stats.contacts.get(key);
     if (!c) {
       const display = (contactName && contactName !== '(Unknown)') ? contactName : (address || 'unknown');
-      c = { displayName: display, sent: 0, recv: 0, total: 0, charsSent: 0, charsRecv: 0 };
+      const photo = stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null;
+      c = { displayName: display, sent: 0, recv: 0, total: 0, charsSent: 0, charsRecv: 0, photo, address: address || '' };
       stats.contacts.set(key, c);
+    } else if (!c.photo && stats.nameMap) {
+      const photo = lookupContactPhoto(address, stats.nameMap);
+      if (photo) c.photo = photo;
     }
     if (isSent) c.sent++; else c.recv++;
     c.total++;
@@ -776,7 +871,7 @@ function dispatchLine(line, ctx, stats) {
   }
 }
 
-async function parseFile(file) {
+async function parseFile(file, nameMap) {
   const totalSize = file.size;
   let bytesProcessed = 0;
   let lastReport = 0;
@@ -784,6 +879,7 @@ async function parseFile(file) {
   self.postMessage({ type: 'progress', pct: 0, bytes: 0, total: totalSize, count: 0, msg: 'opening file…' });
 
   const stats = makeStats();
+  stats.nameMap = nameMap || null;
   const ctx = { mms: null };
 
   // bounded per-line buffer

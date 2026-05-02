@@ -1,3 +1,22 @@
 node_modules/
+
+# user-provided message exports (can be 10GB+, always PII)
 sms-*.xml
+chat.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# user-provided contacts exports (PII: names, phone numbers, photos)
+*.vcf
+*.abcddb
+
+# local sample / scratch data
 imessage_sample/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.swp

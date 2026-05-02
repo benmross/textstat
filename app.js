@@ -331,6 +331,85 @@ function fmtHour(h) {
   return (h - 12) + ' PM';
 }
 
+// ---------- avatars ----------
+
+// Pleasing fallback gradients for the monogram fallback. Each contact deterministically
+// maps to one of these via a small hash so the same person keeps the same color.
+const AVATAR_GRADIENTS = [
+  'linear-gradient(135deg,#ff5ea0,#ff9a3c)',
+  'linear-gradient(135deg,#00f5d4,#00bbf9)',
+  'linear-gradient(135deg,#ffd166,#ef476f)',
+  'linear-gradient(135deg,#06d6a0,#118ab2)',
+  'linear-gradient(135deg,#fb5607,#ff006e)',
+  'linear-gradient(135deg,#8338ec,#3a86ff)',
+  'linear-gradient(135deg,#ffbe0b,#fb5607)',
+  'linear-gradient(135deg,#7400b8,#80ffdb)',
+  'linear-gradient(135deg,#f72585,#4cc9f0)',
+  'linear-gradient(135deg,#4361ee,#b5179e)',
+  'linear-gradient(135deg,#2ec4b6,#e71d36)',
+  'linear-gradient(135deg,#ff9f1c,#ffbf69)',
+];
+
+function hashString(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h;
+}
+
+function initialsOf(name) {
+  if (!name) return '?';
+  // numeric-only (unresolved phone number) → use hash mark + last 2 digits
+  const digits = name.replace(/\D/g, '');
+  if (digits && digits.length === name.replace(/[\s()+\-.]/g, '').length) {
+    return '#' + digits.slice(-2);
+  }
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '?';
+  if (parts.length === 1) {
+    const p = parts[0];
+    // if it's an emoji-prefixed name keep first grapheme
+    return p.slice(0, 2).toUpperCase();
+  }
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+// avatar(entry, size?) — entry can be a contact, group member, or anything
+// with {displayName|name, photo}. size is 'sm'|'md'|'lg'|'xl' (default 'md').
+function avatar(entry, size = 'md') {
+  const name = (entry && (entry.displayName || entry.name || entry.contact)) || '';
+  const photo = entry && entry.photo;
+  if (photo) {
+    return el('div', {
+      class: `avatar avatar-${size} avatar-photo`,
+      style: `background-image:url("${photo.replace(/"/g, '%22')}")`,
+      title: name,
+      'aria-label': name,
+    });
+  }
+  const grad = AVATAR_GRADIENTS[hashString(name || 'x') % AVATAR_GRADIENTS.length];
+  return el('div', {
+    class: `avatar avatar-${size} avatar-mono`,
+    style: `background:${grad}`,
+    title: name,
+    'aria-label': name,
+  }, el('span', { class: 'avatar-init' }, initialsOf(name)));
+}
+
+// Stack of small avatars (e.g., group-chat participants).
+function avatarStack(entries, limit = 5, size = 'sm') {
+  const visible = entries.slice(0, limit);
+  const extra = Math.max(0, entries.length - limit);
+  const kids = visible.map(e => avatar(e, size));
+  if (extra > 0) {
+    kids.push(el('div', { class: `avatar avatar-${size} avatar-more` },
+      el('span', { class: 'avatar-init' }, '+' + extra)));
+  }
+  return el('div', { class: 'avatar-stack' }, ...kids);
+}
+
 function makeSlides(stats) {
   const s = stats.summary;
   const slides = [];
@@ -373,6 +452,7 @@ function makeSlides(stats) {
     slides.push(slideShell(i++, 'your #1',
       el('div', { class: 'kicker' }, 'no one else came close.'),
       el('div', { class: 'kicker tiny' }, 'most messaged contact'),
+      el('div', { class: 'heroAvatarWrap' }, avatar(top1, 'xl')),
       el('div', { class: 'topName' }, top1.displayName),
       el('div', { class: 'megaCount xs' }, fmtNum(top1.total) + ' messages'),
       el('div', { class: 'pillRow' },
@@ -389,9 +469,10 @@ function makeSlides(stats) {
     slides.push(slideShell(i++, 'your top contacts',
       el('div', { class: 'kicker' }, 'the people in your inbox'),
       el('div', { class: 'h2' }, 'top 8'),
-      el('div', { class: 'barList' },
+      el('div', { class: 'barList barList-withAvatars' },
         ...top.map((c, idx) => el('div', { class: 'barRow' },
           el('div', { class: 'barRank' }, '#' + (idx + 1)),
+          avatar(c, 'sm'),
           el('div', { class: 'barName' }, c.displayName),
           el('div', { class: 'barTrack' },
             el('div', { class: 'barFill', style: `width:${(c.total / max * 100).toFixed(2)}%` }),
@@ -555,12 +636,26 @@ function makeSlides(stats) {
   if (s.uniqueGroups > 0) {
     const groupTotal = stats.groups.reduce((a, g) => a + g.count, 0);
     const top = stats.groups[0];
+    // synthesize participant entries for the avatar stack
+    let participantEntries = [];
+    if (top) {
+      const names = top.participantNames || [];
+      const photos = top.participantPhotos || [];
+      const participantCount = Math.max(names.length, top.participants || 0);
+      for (let k = 0; k < participantCount; k++) {
+        participantEntries.push({
+          name: names[k] || 'member ' + (k + 1),
+          photo: photos[k] || null,
+        });
+      }
+    }
     slides.push(slideShell(i++, 'group chats',
       el('div', { class: 'kicker' }, 'you were in'),
       el('div', { class: 'megaCount' }, fmtNum(s.uniqueGroups)),
       el('div', { class: 'megaSub' }, `group chats — ${fmtNum(groupTotal)} messages between them.`),
       top ? el('div', { class: 'groupTop' },
         el('div', { class: 'kicker tiny' }, 'busiest group'),
+        participantEntries.length ? avatarStack(participantEntries, 8, 'md') : null,
         el('div', { class: 'groupName' }, top.name || '(unnamed group)'),
         el('div', { class: 'pill' }, `${fmtNum(top.count)} messages · ${top.participants} people`),
       ) : null,
@@ -581,10 +676,18 @@ function makeSlides(stats) {
 
   // 13 — longest message
   if (s.longestBody && s.longestBody.len > 100) {
+    const lb = s.longestBody;
+    const bylineEntry = { name: lb.contact, photo: lb.photo || null };
     slides.push(slideShell(i++, 'your magnum opus',
-      el('div', { class: 'kicker' }, `your longest single message — ${fmtNum(s.longestBody.len)} characters`),
-      el('div', { class: 'megaSub' }, s.longestBody.sent ? `you sent it to ${s.longestBody.contact}` : `from ${s.longestBody.contact}`),
-      el('blockquote', { class: 'opus' }, '“' + s.longestBody.preview + '”'),
+      el('div', { class: 'kicker' }, `your longest single message — ${fmtNum(lb.len)} characters`),
+      el('div', { class: 'opusByline' },
+        avatar(bylineEntry, 'md'),
+        el('div', { class: 'opusBylineText' },
+          el('div', { class: 'kicker tiny' }, lb.sent ? 'you sent it to' : 'from'),
+          el('div', { class: 'opusName' }, lb.contact),
+        ),
+      ),
+      el('blockquote', { class: 'opus' }, '“' + lb.preview + '”'),
     ));
   }
 
@@ -611,10 +714,14 @@ function makeSlides(stats) {
   }
 
   // 14 — final card
+  const finalFaces = stats.topContacts.slice(0, 10);
   slides.push(slideShell(i++, 'that’s a wrap',
     el('div', { class: 'kicker' }, 'you texted'),
     el('div', { class: 'megaCount' }, fmtNum(s.totalMessages)),
     el('div', { class: 'megaSub' }, `times across ${s.uniqueContacts} contacts.`),
+    finalFaces.length ? el('div', { class: 'faceCollage' },
+      ...finalFaces.map(c => avatar(c, 'md')),
+    ) : null,
     el('div', { class: 'finalRow' },
       el('div', { class: 'finalCard' },
         el('div', { class: 'finalLabel' }, 'sent'),
