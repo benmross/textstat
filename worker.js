@@ -149,11 +149,14 @@ function makeStats() {
     dayCounts: new Map(),       // 'YYYY-MM-DD' -> count
     contacts: new Map(),        // key -> { displayName, addresses:Set, sent, recv, total, charsSent, charsRecv }
     groups: new Map(),          // groupKey -> { participants:Set, name, count }
-    words: new Map(),
-    emojis: new Map(),
+    wordsSent: new Map(),
+    wordsRecv: new Map(),
+    emojisSent: new Map(),
+    emojisRecv: new Map(),
     firstTs: null,
     lastTs: null,
-    longestBody: { len: 0, preview: '', contact: '', photo: null, sent: false, ts: 0 },
+    longestSentBody: { len: 0, preview: '', contact: '', photo: null, sent: true, ts: 0 },
+    longestRecvBody: { len: 0, preview: '', contact: '', photo: null, sent: false, ts: 0 },
     skippedNoText: 0,
   };
 }
@@ -260,17 +263,26 @@ function recordMessage(stats, kind, isSent, ts, address, contactName, text, isGr
     // reactions echo back the message they react to — exclude their text from
     // word and emoji counts (would massively double-count quoted content), but
     // still let them shape contact/time stats above.
-    if (len > stats.longestBody.len && len < 5000) {
-      stats.longestBody = {
-        len,
-        preview: text.length > 240 ? text.slice(0, 240) + '…' : text,
-        contact: contactName || address || '',
-        photo: stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null,
-        sent: isSent, ts,
-      };
+    const bodyRef = isSent ? stats.longestSentBody : stats.longestRecvBody;
+    if (len > bodyRef.len && len < 5000) {
+      if (isSent) {
+        stats.longestSentBody = {
+          len, preview: text.length > 240 ? text.slice(0, 240) + '…' : text,
+          contact: contactName || address || '',
+          photo: stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null,
+          sent: true, ts,
+        };
+      } else {
+        stats.longestRecvBody = {
+          len, preview: text.length > 240 ? text.slice(0, 240) + '…' : text,
+          contact: contactName || address || '',
+          photo: stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null,
+          sent: false, ts,
+        };
+      }
     }
-    countWords(text, stats.words);
-    countEmojis(text, stats.emojis);
+    countWords(text, isSent ? stats.wordsSent : stats.wordsRecv);
+    countEmojis(text, isSent ? stats.emojisSent : stats.emojisRecv);
   }
 }
 
@@ -864,17 +876,26 @@ function recordMessageImsg(stats, isSent, ts, address, contactName, text, isGrou
   }
 
   if (text) {
-    if (len > stats.longestBody.len && len < 5000) {
-      stats.longestBody = {
-        len,
-        preview: text.length > 240 ? text.slice(0, 240) + '…' : text,
-        contact: contactName || address || '',
-        photo: stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null,
-        sent: isSent, ts,
-      };
+    const bodyRef = isSent ? stats.longestSentBody : stats.longestRecvBody;
+    if (len > bodyRef.len && len < 5000) {
+      if (isSent) {
+        stats.longestSentBody = {
+          len, preview: text.length > 240 ? text.slice(0, 240) + '…' : text,
+          contact: contactName || address || '',
+          photo: stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null,
+          sent: true, ts,
+        };
+      } else {
+        stats.longestRecvBody = {
+          len, preview: text.length > 240 ? text.slice(0, 240) + '…' : text,
+          contact: contactName || address || '',
+          photo: stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null,
+          sent: false, ts,
+        };
+      }
     }
-    countWords(text, stats.words);
-    countEmojis(text, stats.emojis);
+    countWords(text, isSent ? stats.wordsSent : stats.wordsRecv);
+    countEmojis(text, isSent ? stats.emojisSent : stats.emojisRecv);
   }
 }
 
@@ -1079,12 +1100,40 @@ function serialize(s) {
     .sort((a, b) => b.count - a.count)
     .slice(0, 15);
 
-  const topWords = Array.from(s.words.entries())
+  const topWordsSent = Array.from(s.wordsSent.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 50)
     .map(([word, count]) => ({ word, count }));
 
-  const topEmojis = Array.from(s.emojis.entries())
+  const topWordsRecv = Array.from(s.wordsRecv.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 50)
+    .map(([word, count]) => ({ word, count }));
+
+  // combined totals for the word cloud (size by total usage)
+  const wordTotals = new Map();
+  for (const [w, c] of s.wordsSent) wordTotals.set(w, (wordTotals.get(w) || 0) + c);
+  for (const [w, c] of s.wordsRecv) wordTotals.set(w, (wordTotals.get(w) || 0) + c);
+  const topWords = Array.from(wordTotals.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 50)
+    .map(([word, count]) => ({ word, count }));
+
+  const topEmojisSent = Array.from(s.emojisSent.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 30)
+    .map(([emoji, count]) => ({ emoji, count }));
+
+  const topEmojisRecv = Array.from(s.emojisRecv.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 30)
+    .map(([emoji, count]) => ({ emoji, count }));
+
+  // combined totals (kept for backward compat / condition checks)
+  const emojiTotals = new Map();
+  for (const [e, c] of s.emojisSent) emojiTotals.set(e, (emojiTotals.get(e) || 0) + c);
+  for (const [e, c] of s.emojisRecv) emojiTotals.set(e, (emojiTotals.get(e) || 0) + c);
+  const topEmojis = Array.from(emojiTotals.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, 30)
     .map(([emoji, count]) => ({ emoji, count }));
@@ -1108,8 +1157,19 @@ function serialize(s) {
     }
   }
 
-  // hour x day-of-week heatmap (we tracked the marginals already; let's build a heatmap separately)
-  // We didn't track joint h x dow — recompute? We don't have it; skip for now and use marginals.
+  // calendar heatmap — all days from first to last with gap-fill (count=0 for silent days)
+  const calDays = [];
+  if (s.firstTs && s.lastTs) {
+    const cur = new Date(s.firstTs);
+    cur.setHours(0, 0, 0, 0);
+    const end = new Date(s.lastTs);
+    end.setHours(23, 59, 59, 999);
+    while (cur <= end) {
+      const ymd = `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}-${String(cur.getDate()).padStart(2, '0')}`;
+      calDays.push({ ymd, count: s.dayCounts.get(ymd) || 0 });
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
 
   // longest streak of days with at least one message
   const days = Array.from(s.dayCounts.entries()).sort((a, b) => a[0].localeCompare(b[0]));
@@ -1187,16 +1247,23 @@ function serialize(s) {
       longestStreak,
       streakStart, streakEnd,
       busiest,
-      longestBody: s.longestBody,
+      longestBody: s.longestSentBody.len >= s.longestRecvBody.len ? s.longestSentBody : s.longestRecvBody,
+      longestSentBody: s.longestSentBody.len > 0 ? s.longestSentBody : null,
+      longestRecvBody: s.longestRecvBody.len > 0 ? s.longestRecvBody : null,
       longestSentRun,
     },
     topContacts,
     groups,
     months: monthsArr,
+    calDays,
     hourSent: s.hourSent, hourRecv: s.hourRecv,
     dowSent: s.dowSent, dowRecv: s.dowRecv,
     topWords,
+    topWordsSent,
+    topWordsRecv,
     topEmojis,
+    topEmojisSent,
+    topEmojisRecv,
     topReactions,
   };
 }

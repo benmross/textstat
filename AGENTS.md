@@ -60,13 +60,13 @@
 | `HourChartSlide` | always |
 | `DayOfWeekSlide` | always |
 | `MonthlyTimelineSlide` | always |
+| `CalendarHeatmapSlide` | calDays.length>0 |
 | `TopWordsSlide` | topWords.length>0 |
 | `TopEmojisSlide` | topEmojis.length>0 |
 | `ReactionsSlide` | reactionsSent+reactionsRecv>0 |
 | `GroupChatsSlide` | uniqueGroups>0 |
 | `StreakSlide` | longestStreak>1 |
-| `LongestMessageSlide` | longestBody.len>100 |
-| `ServiceMixSlide` | iMessage export only |
+| `LongestMessageSlide` | longestSentBody.len>100 or longestRecvBody.len>100 |
 | `WrapSlide` | always |
 
 ### Config Files (root)
@@ -82,7 +82,7 @@
 
 | File | Role |
 |---|---|
-| `public/worker.js` | Web Worker — streaming XML parser, SQLite iMessage parser, vCard/AddressBook contacts parser, stats aggregation (~1173 lines) |
+| `public/worker.js` | Web Worker — streaming XML parser, SQLite iMessage parser, vCard/AddressBook contacts parser, stats aggregation (~1257 lines) |
 | `public/vendor/sql-wasm.js` | Vendored sql.js (Emscripten-compiled SQLite → WASM) |
 | `public/vendor/sql-wasm.wasm` | WASM binary for sql.js (~645 KB) |
 
@@ -148,6 +148,10 @@ Contacts parsing: vCard (`parseVcard()`) or AddressBook `.abcddb` (`parseAddress
 **Group chat name resolution (iMessage)**: Before the main message loop, `parseSqlite()` runs a pre-query joining `chat_handle_join → handle → chat` to fetch all participants per group. Group names default to `display_name`; when that's empty (unnamed groups), a name is derived from the first 3 participant handles/names. `stats.groups` is pre-populated with participant counts and photos before messages are processed.
 
 **Consecutive sent-run tracking**: Each 1:1 contact entry carries `curRun`, `maxRun`, `curMessages[]`, and `maxMessages[]`. The `trackRun(contact, isSent, text)` helper is called from both the XML path (`recordMessage`) and the iMessage path (`recordMessageImsg`) after the contact entry is resolved. `serialize()` surfaces the global max as `summary.longestSentRun`.
+
+**Calendar heatmap**: `calDays` array exported from `serialize()` — all days from `firstTs` to `lastTs` gap-filled with `count=0` for silent days. Layout adapts to dataset length: square size ranges from 5px (many years) to 13px (≤3 months), columns auto-calculated so the full range fits in ≤5 rows. Month grids use Sunday-first week columns; year label shown only on year-change boundaries.
+
+**Split attribution stats**: Words and emojis are tracked in separate sent/received maps (`wordsSent`, `wordsRecv`, `emojisSent`, `emojisRecv`). Serialization emits `topWordsSent`, `topWordsRecv`, `topEmojisSent`, `topEmojisRecv` (each 50/30 entries), plus a combined `topWords`/`topEmojis` (summed totals, for word-cloud sizing). Longest message bodies are tracked separately as `longestSentBody` and `longestRecvBody`; `longestBody` in the summary is the longer of the two (used as the slide condition threshold).
 
 ### Slideshow
 

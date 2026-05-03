@@ -12,13 +12,13 @@ import { SentVsReceivedSlide } from "./slides/SentVsReceivedSlide";
 import { HourChartSlide } from "./slides/HourChartSlide";
 import { DayOfWeekSlide } from "./slides/DayOfWeekSlide";
 import { MonthlyTimelineSlide } from "./slides/MonthlyTimelineSlide";
+import { CalendarHeatmapSlide } from "./slides/CalendarHeatmapSlide";
 import { TopWordsSlide } from "./slides/TopWordsSlide";
 import { TopEmojisSlide } from "./slides/TopEmojisSlide";
 import { ReactionsSlide } from "./slides/ReactionsSlide";
 import { GroupChatsSlide } from "./slides/GroupChatsSlide";
 import { StreakSlide } from "./slides/StreakSlide";
 import { LongestMessageSlide } from "./slides/LongestMessageSlide";
-import { ServiceMixSlide } from "./slides/ServiceMixSlide";
 import { YouTextedMoreSlide, pickYouTextedMore } from "./slides/YouTextedMoreSlide";
 import { TheyTextedMoreSlide, pickTheyTextedMore } from "./slides/TheyTextedMoreSlide";
 import { LongestSentRunSlide } from "./slides/LongestSentRunSlide";
@@ -43,7 +43,6 @@ export function Slideshow({ stats }: SlideshowProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const s = stats.summary;
-  const isImsg = !!s.serviceCounts;
 
   const slidesConfig: SlideConfig[] = [
     { Component: HeroSlide },
@@ -57,13 +56,13 @@ export function Slideshow({ stats }: SlideshowProps) {
     { Component: HourChartSlide },
     { Component: DayOfWeekSlide },
     { Component: MonthlyTimelineSlide },
+    { Component: CalendarHeatmapSlide, condition: (s) => s.calDays.length > 0 },
     { Component: TopWordsSlide, condition: (s) => s.topWords.length > 0 },
     { Component: TopEmojisSlide, condition: (s) => s.topEmojis.length > 0 },
     { Component: ReactionsSlide, condition: () => s.reactionsSent + s.reactionsRecv > 0 },
     { Component: GroupChatsSlide, condition: () => s.uniqueGroups > 0 },
     { Component: StreakSlide, condition: () => s.longestStreak > 1 },
-    { Component: LongestMessageSlide, condition: () => !!s.longestBody && s.longestBody.len > 100 },
-    { Component: ServiceMixSlide, condition: () => isImsg },
+    { Component: LongestMessageSlide, condition: () => (s.longestSentBody?.len ?? 0) > 100 || (s.longestRecvBody?.len ?? 0) > 100 },
     { Component: WrapSlide },
   ];
 

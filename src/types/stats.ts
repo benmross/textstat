@@ -32,6 +32,11 @@ export interface MonthEntry {
   count: number;
 }
 
+export interface DayEntry {
+  ymd: string;
+  count: number;
+}
+
 export interface BusiestDay {
   ymd: string | null;
   count: number;
@@ -79,6 +84,8 @@ export interface Summary {
   streakEnd: string | null;
   busiest: BusiestDay;
   longestBody: LongestBody | null;
+  longestSentBody: LongestBody | null;
+  longestRecvBody: LongestBody | null;
   longestSentRun: { count: number; displayName: string; photo: string | null; messages: string[] } | null;
 }
 
@@ -91,8 +98,13 @@ export interface TextStatStats {
   hourRecv: number[];
   dowSent: number[];
   dowRecv: number[];
+  calDays: DayEntry[];
   topWords: WordEntry[];
+  topWordsSent: WordEntry[];
+  topWordsRecv: WordEntry[];
   topEmojis: EmojiEntry[];
+  topEmojisSent: EmojiEntry[];
+  topEmojisRecv: EmojiEntry[];
   topReactions: EmojiEntry[];
 }
 

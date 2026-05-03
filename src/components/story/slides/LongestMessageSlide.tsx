@@ -4,13 +4,70 @@ import { motion } from "framer-motion";
 import { SlideShell } from "@/components/story/SlideShell";
 import { Avatar } from "@/components/shared/Avatar";
 import { Palette } from "@/lib/palettes";
-import { TextStatStats } from "@/types/stats";
+import { TextStatStats, LongestBody } from "@/types/stats";
 import { fmtNum } from "@/lib/formatting";
+import { contrastColor } from "@/lib/palettes";
 
 interface LongestMessageSlideProps {
   stats: TextStatStats;
   palette: Palette;
   isCurrent: boolean;
+}
+
+function MessageCard({
+  lb,
+  label,
+  palette,
+  isCurrent,
+  delay,
+}: {
+  lb: LongestBody;
+  label: string;
+  palette: Palette;
+  isCurrent: boolean;
+  delay: number;
+}) {
+  const fgContrast = contrastColor(palette.fg);
+  const bylineEntry = { name: lb.contact, photo: lb.photo };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 24 }}
+      animate={isCurrent ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }}
+      transition={{ duration: 0.5, delay: isCurrent ? delay : 0, ease: "easeOut" }}
+      className="flex flex-col gap-3 rounded-[22px] bg-black/20 border border-white/15 p-5 text-left"
+    >
+      {/* label pill + char count */}
+      <div className="flex items-center justify-between gap-3">
+        <div
+          className="text-[0.65rem] font-bold uppercase tracking-[0.18em] px-3 py-1 rounded-full shrink-0"
+          style={{ backgroundColor: palette.fg, color: fgContrast }}
+        >
+          {label}
+        </div>
+        <div className="text-xs opacity-60 font-mono">{fmtNum(lb.len)} chars</div>
+      </div>
+
+      {/* byline */}
+      <div className="inline-flex items-center gap-3 rounded-full bg-black/20 pl-[0.45rem] pr-4 py-[0.45rem] self-start">
+        <Avatar entry={bylineEntry} size="sm" />
+        <div className="flex flex-col gap-0 leading-[1.1]">
+          <div className="text-[0.6rem] uppercase tracking-[0.14em] opacity-60">
+            {lb.sent ? "you wrote" : "from"}
+          </div>
+          <div className="text-[clamp(0.85rem,1.4vw,1rem)] font-extrabold">{lb.contact}</div>
+        </div>
+      </div>
+
+      {/* quote */}
+      <blockquote
+        className="text-[clamp(0.82rem,1.3vw,1rem)] leading-[1.55] opacity-90 border-l-4 pl-4"
+        style={{ borderColor: palette.accent }}
+      >
+        &ldquo;{lb.preview}&rdquo;
+      </blockquote>
+    </motion.div>
+  );
 }
 
 export function LongestMessageSlide({
@@ -19,10 +76,12 @@ export function LongestMessageSlide({
   isCurrent,
 }: LongestMessageSlideProps) {
   const s = stats.summary;
-  const lb = s.longestBody;
-  if (!lb || lb.len <= 100) return null;
+  const sentBody = s.longestSentBody;
+  const recvBody = s.longestRecvBody;
 
-  const bylineEntry = { name: lb.contact, photo: lb.photo };
+  const hasSent = sentBody && sentBody.len > 100;
+  const hasRecv = recvBody && recvBody.len > 100;
+  if (!hasSent && !hasRecv) return null;
 
   const fu = (delay: number) => ({
     initial: { opacity: 0, y: 18 },
@@ -30,36 +89,34 @@ export function LongestMessageSlide({
     transition: { duration: 0.5, delay: isCurrent ? delay : 0, ease: "easeOut" as const },
   });
 
+  const bothVisible = hasSent && hasRecv;
+
   return (
-    <SlideShell label="your magnum opus" palette={palette} isCurrent={isCurrent}>
+    <SlideShell label="longest messages" palette={palette} isCurrent={isCurrent}>
       <motion.div {...fu(0)} className="text-[clamp(1rem,1.5vw,1.3rem)] opacity-80 font-medium">
-        your longest single message — {fmtNum(lb.len)} characters
+        {bothVisible ? "your longest vs. theirs" : hasSent ? "your longest message" : "the longest message you received"}
       </motion.div>
-      <motion.div
-        initial={{ opacity: 0, x: -24 }}
-        animate={isCurrent ? { opacity: 1, x: 0 } : { opacity: 0, x: -24 }}
-        transition={{ duration: 0.5, delay: isCurrent ? 0.14 : 0, ease: "easeOut" }}
-        className="mt-2 inline-flex items-center gap-4 rounded-full bg-black/20 pl-[0.55rem] pr-4 py-[0.55rem]"
-      >
-        <Avatar entry={bylineEntry} size="md" />
-        <div className="flex flex-col items-start gap-0 leading-[1.1] text-left">
-          <div className="text-xs uppercase tracking-[0.15em] opacity-65">
-            {lb.sent ? "you sent it to" : "from"}
-          </div>
-          <div className="text-[clamp(1rem,1.6vw,1.2rem)] font-extrabold">
-            {lb.contact}
-          </div>
-        </div>
-      </motion.div>
-      <motion.blockquote
-        initial={{ opacity: 0, y: 24 }}
-        animate={isCurrent ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }}
-        transition={{ duration: 0.55, delay: isCurrent ? 0.3 : 0, ease: "easeOut" }}
-        className="mt-6 max-w-[720px] rounded-[18px] bg-black/20 px-6 py-5 text-left text-[clamp(1rem,1.6vw,1.25rem)] leading-[1.5] border-l-4"
-        style={{ borderColor: palette.accent }}
-      >
-        &ldquo;{lb.preview}&rdquo;
-      </motion.blockquote>
+
+      <div className={`grid gap-4 w-[min(860px,100%)] mt-2 ${bothVisible ? "grid-cols-2" : "grid-cols-1 max-w-[520px]"}`}>
+        {hasSent && (
+          <MessageCard
+            lb={sentBody!}
+            label="you"
+            palette={palette}
+            isCurrent={isCurrent}
+            delay={0.14}
+          />
+        )}
+        {hasRecv && (
+          <MessageCard
+            lb={recvBody!}
+            label="them"
+            palette={palette}
+            isCurrent={isCurrent}
+            delay={bothVisible ? 0.22 : 0.14}
+          />
+        )}
+      </div>
     </SlideShell>
   );
 }
