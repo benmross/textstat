@@ -117,7 +117,7 @@ export function LongestSentRunSlide({ stats, palette, isCurrent }: Props) {
               initial={{ opacity: 0, x: 20 }}
               animate={isCurrent ? { opacity: 1, x: 0 } : { opacity: 0, x: 20 }}
               transition={{ duration: 0.35, delay: isCurrent ? 0.38 + i * 0.045 : 0, ease: "easeOut" }}
-              className="self-end max-w-[85%] rounded-[18px] rounded-br-[5px] px-4 py-2 text-sm leading-snug break-words"
+              className="self-end max-w-[85%] rounded-[18px] rounded-br-[5px] px-4 py-2 text-sm leading-snug break-words text-left"
               style={{ backgroundColor: palette.fg, color: bubbleText }}
             >
               {msg || <span className="opacity-40 italic">attachment</span>}

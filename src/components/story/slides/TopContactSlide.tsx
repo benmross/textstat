@@ -48,8 +48,8 @@ export function TopContactSlide({ stats, palette, isCurrent }: TopContactSlidePr
       </motion.div>
       <div className="mt-3 flex flex-wrap justify-center gap-2">
         {[
-          `${fmtNum(top1.sent)} sent → them`,
-          `${fmtNum(top1.recv)} from them →`,
+          `${fmtNum(top1.sent)} you → them`,
+          `${fmtNum(top1.recv)} them → you`,
         ].map((text, i) => (
           <motion.div
             key={text}
