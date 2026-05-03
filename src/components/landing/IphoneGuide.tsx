@@ -82,9 +82,6 @@ export function IphoneGuide() {
           <p>
             Drag <code className="rounded-md bg-white/10 px-[0.45rem] py-[0.15rem] font-mono text-[0.9em]">chat.db</code> into the drop zone below.
           </p>
-          <div className="flex min-h-[80px] max-w-[460px] items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-white/[0.04] p-5 text-[0.82rem] text-white/50">
-            <span>[ Screenshot: Finder window showing chat.db ]</span>
-          </div>
         </>
       ),
     },

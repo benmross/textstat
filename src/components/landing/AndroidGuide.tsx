@@ -7,51 +7,36 @@ export function AndroidGuide() {
     {
       step: 1,
       body: (
-        <>
-          <p>
-            Install{" "}
-            <a
-              href="https://play.google.com/store/apps/details?id=com.riteshsahu.SMSBackupRestore"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-[#00d6ff] underline underline-offset-[0.2em] hover:text-[#aef639]"
-            >
-              SMS Backup &amp; Restore
-            </a>{" "}
-            from the Google Play Store.
-          </p>
-          <div className="flex min-h-[80px] max-w-[460px] items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-white/[0.04] p-5 text-[0.82rem] text-white/50">
-            <span>[ Screenshot: Play Store listing ]</span>
-          </div>
-        </>
+        <p>
+          Install{" "}
+          <a
+            href="https://play.google.com/store/apps/details?id=com.riteshsahu.SMSBackupRestore"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-[#00d6ff] underline underline-offset-[0.2em] hover:text-[#aef639]"
+          >
+            SMS Backup &amp; Restore
+          </a>{" "}
+          from the Google Play Store.
+        </p>
       ),
     },
     {
       step: 2,
       body: (
-        <>
-          <p>
-            Open the app and tap <strong>SET UP A BACKUP</strong>.
-          </p>
-          <div className="flex min-h-[80px] max-w-[460px] items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-white/[0.04] p-5 text-[0.82rem] text-white/50">
-            <span>[ Screenshot: SMS Backup &amp; Restore home screen ]</span>
-          </div>
-        </>
+        <p>
+          Open the app and tap <strong>SET UP A BACKUP</strong>.
+        </p>
       ),
     },
     {
       step: 3,
       body: (
-        <>
-          <p>
-            Make sure <strong>Messages</strong> (SMS &amp; MMS) is toggled on.
-            Choose where to save the backup, then tap{" "}
-            <strong>BACK UP NOW</strong>.
-          </p>
-          <div className="flex min-h-[80px] max-w-[460px] items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-white/[0.04] p-5 text-[0.82rem] text-white/50">
-            <span>[ Screenshot: Backup settings screen ]</span>
-          </div>
-        </>
+        <p>
+          Make sure <strong>Messages</strong> (SMS &amp; MMS) is toggled on.
+          Choose where to save the backup, then tap{" "}
+          <strong>BACK UP NOW</strong>.
+        </p>
       ),
     },
     {
@@ -72,18 +57,13 @@ export function AndroidGuide() {
     {
       step: 5,
       body: (
-        <>
-          <p>
-            Drag that{" "}
-            <code className="rounded-md bg-white/10 px-[0.45rem] py-[0.15rem] font-mono text-[0.9em]">
-              .xml
-            </code>{" "}
-            file into the drop zone below.
-          </p>
-          <div className="flex min-h-[80px] max-w-[460px] items-center justify-center rounded-2xl border-2 border-dashed border-white/20 bg-white/[0.04] p-5 text-[0.82rem] text-white/50">
-            <span>[ Screenshot: XML file on your desktop ]</span>
-          </div>
-        </>
+        <p>
+          Drag that{" "}
+          <code className="rounded-md bg-white/10 px-[0.45rem] py-[0.15rem] font-mono text-[0.9em]">
+            .xml
+          </code>{" "}
+          file into the drop zone below.
+        </p>
       ),
     },
   ];
