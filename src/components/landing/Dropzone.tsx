@@ -2,6 +2,7 @@
 
 import { useCallback } from "react";
 import { motion } from "framer-motion";
+import { Upload } from "lucide-react";
 
 interface DropzoneProps {
   onFileSelected: (file: File) => void;
@@ -80,7 +81,7 @@ export function Dropzone({
             boxShadow: `0 8px 24px -6px ${iconShadow}`,
           }}
         >
-          {icon || "⇑"}
+          {icon ?? <Upload size={22} />}
         </div>
         <div className="flex flex-col gap-1">
           <strong className="text-[0.95rem] font-bold">{label}</strong>

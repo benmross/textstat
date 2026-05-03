@@ -79,6 +79,7 @@ export interface Summary {
   streakEnd: string | null;
   busiest: BusiestDay;
   longestBody: LongestBody | null;
+  longestSentRun: { count: number; displayName: string; photo: string | null; messages: string[] } | null;
 }
 
 export interface TextStatStats {

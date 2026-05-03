@@ -7,7 +7,7 @@
 **textstat** is a 100% client-side browser app that produces a Spotify-Wrapped-style slideshow from your SMS/iMessage history. Users drop in either a [SMS Backup & Restore](https://www.smsbackupandrestore.com/) XML export or a macOS `chat.db` (the Messages SQLite database), and the app parses everything locally — no data leaves the device.
 
 - **Repo:** [`https://github.com/benmross/textstat`](https://github.com/benmross/textstat) (private)
-- **Frontend:** Next.js 16 (App Router) with TypeScript, Tailwind CSS v4, shadcn/ui v4, and Framer Motion
+- **Frontend:** Next.js 16 (App Router) with TypeScript, Tailwind CSS v4, shadcn/ui v4, Framer Motion, lucide-react (icons), and react-icons (brand logos)
 - **Legacy frontend:** `legacy/` directory (vanilla JS, kept for reference)
 - **Runtime:** Browser only. `public/vendor/sql-wasm.js` + `public/vendor/sql-wasm.wasm` provide SQLite via WebAssembly (sql.js compiled to WASM).
 - **Dependencies:** None at runtime. `sql.js` in `package.json` is dev-only, used by the Node.js test scripts.
@@ -33,16 +33,41 @@
 | `src/components/story/Slideshow.tsx` | Main slideshow orchestrator — keyboard nav, slide cycling, palette assignment |
 | `src/components/story/SlideShell.tsx` | Slide chrome wrapper (gradient background, tag, dot pattern, body) |
 | `src/components/story/StoryControls.tsx` | Navigation bar (prev/next arrows, progress dots, restart) |
-| `src/components/story/slides/*.tsx` | 16 individual slide components |
-| `src/components/shared/Avatar.tsx` | Circular avatar with photo/fallback monogram (deterministic gradient based on name hash) |
+| `src/components/story/slides/*.tsx` | 19 individual slide components (see list below) |
+| `src/components/shared/Avatar.tsx` | Circular avatar with photo/fallback monogram; `AvatarStack` renders overlapping circles with `+N` chip |
+| `src/components/shared/AppleEmoji.tsx` | Renders emoji as Apple CDN images (emoji-datasource-apple via jsDelivr); falls back to system font on error; used for iMessage exports only |
 | `src/components/shared/Pill.tsx` | Pill/badge component |
 | `src/components/shared/AnimatedBackground.tsx` | Floating blob background (Framer Motion drift animation) |
 | `src/components/shared/GlowBorder.tsx` | Glassmorphism glow border wrapper utility |
 | `src/lib/utils.ts` | shadcn `cn()` utility (clsx + tailwind-merge) |
 | `src/lib/formatting.ts` | Date/number formatting, constants (DOW_NAMES, MONTH_NAMES, etc.) |
 | `src/lib/avatars.ts` | Avatar gradient palette, initials extraction, string hashing |
-| `src/lib/palettes.ts` | Slide color palette definitions |
+| `src/lib/palettes.ts` | Slide color palette definitions + `contrastColor(hex)` helper (returns black/white for readable text on any palette.fg background) |
 | `src/types/stats.ts` | TypeScript types for parsed stats data |
+
+#### Slide inventory
+
+| Slide | Condition |
+|---|---|
+| `HeroSlide` | always |
+| `ActiveDaysSlide` | always |
+| `TopContactSlide` | topContacts[0] exists |
+| `TopContactsListSlide` | >1 top contact |
+| `YouTextedMoreSlide` | a contact with total≥15 where you sent more |
+| `TheyTextedMoreSlide` | a contact with total≥15 where they sent more |
+| `LongestSentRunSlide` | longestSentRun.count≥3 |
+| `SentVsReceivedSlide` | always |
+| `HourChartSlide` | always |
+| `DayOfWeekSlide` | always |
+| `MonthlyTimelineSlide` | always |
+| `TopWordsSlide` | topWords.length>0 |
+| `TopEmojisSlide` | topEmojis.length>0 |
+| `ReactionsSlide` | reactionsSent+reactionsRecv>0 |
+| `GroupChatsSlide` | uniqueGroups>0 |
+| `StreakSlide` | longestStreak>1 |
+| `LongestMessageSlide` | longestBody.len>100 |
+| `ServiceMixSlide` | iMessage export only |
+| `WrapSlide` | always |
 
 ### Config Files (root)
 
@@ -57,7 +82,7 @@
 
 | File | Role |
 |---|---|
-| `public/worker.js` | Web Worker — streaming XML parser, SQLite iMessage parser, vCard/AddressBook contacts parser, stats aggregation (~1090 lines) |
+| `public/worker.js` | Web Worker — streaming XML parser, SQLite iMessage parser, vCard/AddressBook contacts parser, stats aggregation (~1173 lines) |
 | `public/vendor/sql-wasm.js` | Vendored sql.js (Emscripten-compiled SQLite → WASM) |
 | `public/vendor/sql-wasm.wasm` | WASM binary for sql.js (~645 KB) |
 
@@ -120,6 +145,10 @@ Format detection by sniffing first 16 bytes:
 
 Contacts parsing: vCard (`parseVcard()`) or AddressBook `.abcddb` (`parseAddressBookDb()`). Photo extraction from vCard PHOTO field with vCard 3.0/4.0 support, emitting data URLs.
 
+**Group chat name resolution (iMessage)**: Before the main message loop, `parseSqlite()` runs a pre-query joining `chat_handle_join → handle → chat` to fetch all participants per group. Group names default to `display_name`; when that's empty (unnamed groups), a name is derived from the first 3 participant handles/names. `stats.groups` is pre-populated with participant counts and photos before messages are processed.
+
+**Consecutive sent-run tracking**: Each 1:1 contact entry carries `curRun`, `maxRun`, `curMessages[]`, and `maxMessages[]`. The `trackRun(contact, isSent, text)` helper is called from both the XML path (`recordMessage`) and the iMessage path (`recordMessageImsg`) after the contact entry is resolved. `serialize()` surfaces the global max as `summary.longestSentRun`.
+
 ### Slideshow
 
 `Slideshow.tsx` builds an array of slide configs with conditional rendering (some slides only show based on available data). Each slide gets a rotating palette from `PALETTES[]`. Navigation: arrow keys, prev/next buttons, progress-bar dots. Framer Motion handles slide transitions.
@@ -141,6 +170,9 @@ Contacts parsing: vCard (`parseVcard()`) or AddressBook `.abcddb` (`parseAddress
 - **shadcn/ui v4** — button, card, badge, progress primitives from base-ui/react
 - **Framer Motion** — screen transitions (`AnimatePresence`), blob animations, hover effects, slide transitions
 - **Guided wizard UX** — 2-phase flow (pick platform → guided upload)
+- **No emoji characters in UI** — all decorative icons use `lucide-react` components; proprietary brand logos (Apple, Android) use `react-icons/fa`
+- **Apple emoji on iMessage exports** — `AppleEmoji` component loads 64×64 PNGs from `emoji-datasource-apple` via jsDelivr CDN; falls back to text with system emoji font; only activated when `stats.summary.serviceCounts` is set (iMessage)
+- **Contrast-safe palette colors** — `contrastColor(hex)` in `palettes.ts` computes luminance and returns `#000000cc` or `#ffffffee`; used wherever `palette.fg` is a background color to avoid invisible text (several palettes have identical `fg` and `accent`)
 - **No regex/DOMParser for XML** — `indexOf` scans + bounded 256KB line buffers in worker
 - **Streaming parsing** — `ReadableStream` API so parsing begins before file fully loaded
 - **One worker, one-shot** — worker is `terminate()`d after `done`
@@ -192,6 +224,21 @@ node test_imessage.cjs [path/to/chat.db]
 5. Verify dropzones accept correct file types
 6. If `worker.js` or `vendor/` change, sync `vendor/` → `public/vendor/` and `worker.js` → `public/worker.js`
 
+### Slide Entrance Animations
+
+Every slide uses Framer Motion entrance animations keyed to `isCurrent`. The pattern:
+
+- **Text lines**: `motion.div` with `initial={{ opacity: 0, y: 18 }}` → `animate={isCurrent ? { opacity: 1, y: 0 } : hidden}`, staggered delays
+- **Big numbers / hero text**: fade + slight scale (`scale: 0.85 → 1`) or spring pop (`scale: 0.75 → 1`)
+- **Pills / badges**: spring pop-in (`scale: 0 → 1`) with stagger (`type: "spring", stiffness: 400, damping: 20`)
+- **Chart bars (DayOfWeekSlide, HourChartSlide, MonthlyTimelineSlide)**: `scaleY: 0 → 1` with `transformOrigin: "bottom"`, staggered by column index
+- **Progress bars (TopContactsListSlide)**: `scaleX: 0 → 1` with `transformOrigin: "left"`
+- **Split bar (SentVsReceivedSlide)**: `scaleX: 0 → 1` with `transformOrigin: "left"` on the whole bar container
+- **Avatars / emoji bubbles**: spring pop-in (`scale: 0 → 1`), bouncier spring for large emojis
+- **Word cloud (TopWordsSlide)**: opacity-only stagger (no translate, keeps layout stable)
+- **Byline cards / blockquotes (LongestMessageSlide)**: `x: -24 → 0` slide-in for byline, `y: 24 → 0` for quote
+- All animations respect `isCurrent` for reset on navigate-away, so re-visiting a slide replays its entrance
+
 ### Adding a New Slide
 
 1. Create a new component in `src/components/story/slides/`
@@ -199,3 +246,16 @@ node test_imessage.cjs [path/to/chat.db]
 3. Register in the `slidesConfig` array in `Slideshow.tsx`
 4. Optionally add a `condition` function if the slide is conditional
 5. Navigation dots auto-update based on filtered array length
+6. Add entrance animations following the patterns above (use `isCurrent` to gate `animate` targets)
+
+### Split Bars (Sent vs Received)
+
+Slides with a proportional split bar (`SentVsReceivedSlide`, `YouTextedMoreSlide`, `TheyTextedMoreSlide`) follow this pattern:
+- **Left/dominant side**: `backgroundColor: palette.fg`, `color: contrastColor(palette.fg)` — never use `palette.accent` directly as text on `palette.fg` (several palettes have identical values)
+- **Right/recessive side**: `backgroundColor: "rgba(0,0,0,.25)"`, `color: "rgba(255,255,255,0.9)"` — white is always readable on this dark overlay
+
+### Scrollable Slide Content
+
+`LongestSentRunSlide` has a scrollable message list. Pattern for auto-scroll with user-override:
+- Use a `ready` state (set via `setTimeout` after entrance animation completes) to trigger the RAF scroll loop
+- Use `onWheel` + `onTouchStart` (not `onScroll`) on the container to set a `userScrolled` ref — `onScroll` fires on programmatic changes too and would kill the animation immediately

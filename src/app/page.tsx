@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
+import { Sparkles } from "lucide-react";
 import { Platform, TextStatStats, Screen } from "@/types/stats";
 import { AnimatedBackground } from "@/components/shared/AnimatedBackground";
 import { PlatformPicker } from "@/components/landing/PlatformPicker";
@@ -98,7 +99,7 @@ export default function Home() {
         setScreen("story");
         worker.terminate();
       } else if (m.type === "error") {
-        setProgressMsg("something broke 😭 — " + m.error.split("\n")[0]);
+        setProgressMsg("something broke — " + m.error.split("\n")[0]);
         console.error("[textstat worker]", m.error);
       }
     };
@@ -130,8 +131,8 @@ export default function Home() {
           >
             <AnimatedBackground />
             <div className="relative mx-auto w-[min(880px,92vw)] px-0 py-8 pb-16 pt-8">
-              <div className="mb-8 inline-flex items-baseline gap-[0.55rem] rounded-full border border-white/20 px-[0.9rem] py-[0.35rem] font-mono text-xs uppercase tracking-[0.12em] text-white/85 backdrop-blur-sm">
-                <span className="text-[#aef639] text-[1.1rem]">✺</span>
+              <div className="mb-8 inline-flex items-center gap-[0.55rem] rounded-full border border-white/20 px-[0.9rem] py-[0.35rem] font-mono text-xs uppercase tracking-[0.12em] text-white/85 backdrop-blur-sm">
+                <Sparkles className="text-[#aef639]" size={14} />
                 <span>textstat</span>
               </div>
 

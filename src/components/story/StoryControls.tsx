@@ -28,7 +28,7 @@ export function StoryControls({
         </button>
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 z-[5] flex items-center gap-4 px-6 py-[1.1rem_1.5rem_1.4rem]">
+      <div className="absolute bottom-0 left-0 right-0 z-[5] flex items-center gap-4 px-6 pt-4 pb-6">
         <button
           onClick={onPrev}
           className="flex h-[44px] w-[44px] flex-none items-center justify-center rounded-full bg-white/15 text-[1.4rem] leading-none text-white backdrop-blur-md transition-all hover:bg-white/25 hover:scale-105"

@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { Platform } from "@/types/stats";
+import { FaApple, FaAndroid } from "react-icons/fa";
 
 interface PlatformPickerProps {
   onSelect: (platform: Platform) => void;
@@ -38,9 +39,7 @@ export function PlatformPicker({ onSelect }: PlatformPickerProps) {
           onClick={() => onSelect("iphone")}
           className="group relative flex flex-col items-center gap-2 rounded-[28px] border-2 border-white/15 bg-white/5 p-8 pb-6 text-center transition-all hover:border-white/35 hover:bg-white/10 hover:shadow-[0_16px_40px_-14px_rgba(0,0,0,.4)]"
         >
-          <span className="text-[3.5rem] leading-none drop-shadow-[0_6px_12px_rgba(0,0,0,.3)]">
-            🍎
-          </span>
+          <FaApple size={56} className="drop-shadow-[0_6px_12px_rgba(0,0,0,.3)] text-white/90" />
           <span className="text-xl font-extrabold tracking-[-0.02em]">
             iPhone
           </span>
@@ -53,9 +52,7 @@ export function PlatformPicker({ onSelect }: PlatformPickerProps) {
           onClick={() => onSelect("android")}
           className="group relative flex flex-col items-center gap-2 rounded-[28px] border-2 border-white/15 bg-white/5 p-8 pb-6 text-center transition-all hover:border-white/35 hover:bg-white/10 hover:shadow-[0_16px_40px_-14px_rgba(0,0,0,.4)]"
         >
-          <span className="text-[3.5rem] leading-none drop-shadow-[0_6px_12px_rgba(0,0,0,.3)]">
-            🤖
-          </span>
+          <FaAndroid size={56} className="drop-shadow-[0_6px_12px_rgba(0,0,0,.3)] text-[#3DDC84]" />
           <span className="text-xl font-extrabold tracking-[-0.02em]">
             Android
           </span>

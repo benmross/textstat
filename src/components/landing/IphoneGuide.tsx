@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { Check, Copy } from "lucide-react";
 
 export function IphoneGuide() {
   const [copied, setCopied] = useState(false);
@@ -58,13 +59,17 @@ export function IphoneGuide() {
             </code>
             <button
               onClick={handleCopy}
-              className={`flex-none rounded-lg border border-white/15 bg-white/10 px-[0.6rem] py-[0.25rem] font-mono text-xs font-semibold transition-colors whitespace-nowrap ${
+              className={`inline-flex items-center gap-1 flex-none rounded-lg border border-white/15 bg-white/10 px-[0.6rem] py-[0.25rem] font-mono text-xs font-semibold transition-colors whitespace-nowrap ${
                 copied
                   ? "text-[#aef639] bg-[#aef63926]"
                   : "text-[#ffd60a] hover:bg-white/20"
               }`}
             >
-              {copied ? "✓ copied!" : "⧉ copy"}
+              {copied ? (
+                <><Check size={11} strokeWidth={2.5} />copied!</>
+              ) : (
+                <><Copy size={11} strokeWidth={2} />copy</>
+              )}
             </button>
           </div>
         </>

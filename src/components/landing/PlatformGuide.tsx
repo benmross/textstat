@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { Upload, User, Sparkles } from "lucide-react";
 import { Platform } from "@/types/stats";
 import { IphoneGuide } from "./IphoneGuide";
 import { AndroidGuide } from "./AndroidGuide";
@@ -57,7 +58,7 @@ export function PlatformGuide({
           accept={isIphone ? ".db,application/x-sqlite3,application/octet-stream" : ".xml,application/xml,text/xml"}
           label={isIphone ? "Click or drag your chat.db here" : "Click or drag your .xml backup here"}
           hint={isIphone ? "~/Library/Messages/chat.db" : "sms-*.xml from SMS Backup & Restore"}
-          icon="⇑"
+          icon={<Upload size={22} />}
           iconBg="linear-gradient(135deg, #ff2e63, #ffd60a)"
           iconShadow="rgba(255,46,99,.45)"
           hasFile={!!dbFile}
@@ -76,7 +77,7 @@ export function PlatformGuide({
           accept=".vcf,.abcddb,text/vcard,application/octet-stream"
           label="Contacts"
           hint="Drop a .vcf (Export from Contacts app) or .abcddb"
-          icon="👤"
+          icon={<User size={22} />}
           iconBg="linear-gradient(135deg, #00d6ff, #aef639)"
           iconShadow="rgba(0,214,255,.45)"
           hasFile={!!contactsFile}
@@ -94,7 +95,11 @@ export function PlatformGuide({
             : "cursor-not-allowed bg-white/[0.06] text-white/35"
         }`}
       >
-        {dbFile ? "Generate My Wrap ✦" : "Drop your message data above"}
+        {dbFile ? (
+          <span className="inline-flex items-center gap-2">
+            Generate My Wrap <Sparkles size={18} />
+          </span>
+        ) : "Drop your message data above"}
       </motion.button>
 
       <div className="my-3 flex min-h-[2.5rem] flex-wrap items-center gap-2">

@@ -16,7 +16,7 @@ export function Pill({
       className={cn(
         "inline-flex items-center rounded-full border border-white/15 px-[1.05rem] py-[.55rem] text-[.95rem]",
         alt
-          ? "bg-current border-transparent font-semibold"
+          ? "bg-white/90 text-black/85 border-transparent font-semibold"
           : "bg-black/20",
         className
       )}

@@ -158,6 +158,22 @@ function makeStats() {
   };
 }
 
+const MAX_RUN_MESSAGES = 30;
+
+function trackRun(c, isSent, text) {
+  if (isSent) {
+    if (c.curMessages.length < MAX_RUN_MESSAGES) c.curMessages.push(text || '');
+    c.curRun++;
+    if (c.curRun > c.maxRun) {
+      c.maxRun = c.curRun;
+      c.maxMessages = c.curMessages.slice();
+    }
+  } else {
+    c.curRun = 0;
+    c.curMessages = [];
+  }
+}
+
 function recordMessage(stats, kind, isSent, ts, address, contactName, text, isGroup, opts) {
   stats.totalMessages++;
   if (kind === 'sms') {
@@ -224,7 +240,7 @@ function recordMessage(stats, kind, isSent, ts, address, contactName, text, isGr
     if (!c) {
       const display = (contactName && contactName !== '(Unknown)') ? contactName : (address || 'unknown');
       const photo = stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null;
-      c = { displayName: display, sent: 0, recv: 0, total: 0, charsSent: 0, charsRecv: 0, photo, address: address || '' };
+      c = { displayName: display, sent: 0, recv: 0, total: 0, charsSent: 0, charsRecv: 0, photo, address: address || '', curRun: 0, maxRun: 0, curMessages: [], maxMessages: [] };
       stats.contacts.set(key, c);
     } else {
       if ((!c.displayName || c.displayName === '(Unknown)') && contactName && contactName !== '(Unknown)') {
@@ -237,6 +253,7 @@ function recordMessage(stats, kind, isSent, ts, address, contactName, text, isGr
     }
     if (isSent) { c.sent++; c.charsSent += len; } else { c.recv++; c.charsRecv += len; }
     c.total++;
+    trackRun(c, isSent, text);
   }
 
   if (text && !reactionEmoji) {
@@ -627,6 +644,49 @@ async function parseSqlite(file, nameMap) {
   const stats = makeStats();
   stats.nameMap = nameMap || null;
 
+  // Pre-query: fetch participants for every group chat so we can derive names
+  // and participant counts. chat.display_name is only set when the user gives
+  // the group a custom name; otherwise we build it from the member handles.
+  const chatInfoMap = new Map(); // chat ROWID → { chatIdentifier, displayName, handles[] }
+  try {
+    const pstmt = db.prepare(`
+      SELECT chj.chat_id AS chat_rowid, c.display_name, c.chat_identifier, h.id AS handle
+      FROM chat_handle_join chj
+      JOIN handle h ON chj.handle_id = h.ROWID
+      JOIN chat c   ON chj.chat_id   = c.ROWID
+      WHERE c.style = 43
+      ORDER BY chj.chat_id
+    `);
+    while (pstmt.step()) {
+      const r = pstmt.getAsObject();
+      const rowid = r.chat_rowid;
+      if (!chatInfoMap.has(rowid)) {
+        chatInfoMap.set(rowid, { chatIdentifier: r.chat_identifier || '', displayName: r.display_name || '', handles: [] });
+      }
+      if (r.handle) chatInfoMap.get(rowid).handles.push(r.handle);
+    }
+    pstmt.free();
+  } catch (_) { /* chat_handle_join may not exist in very old exports */ }
+
+  // Resolve each group's display name and pre-populate stats.groups so
+  // bucketMessage finds an entry with participant info already set.
+  for (const [, info] of chatInfoMap) {
+    if (!info.chatIdentifier) continue;
+    const participantNames = info.handles.map(h => (nameMap && lookupContactName(h, nameMap)) || h);
+    const participantPhotos = info.handles.map(h => nameMap ? lookupContactPhoto(h, nameMap) : null).filter(Boolean);
+    if (!info.displayName && info.handles.length > 0) {
+      const shown = participantNames.slice(0, 3).join(', ');
+      info.displayName = info.handles.length > 3 ? shown + ` +${info.handles.length - 3}` : shown;
+    }
+    stats.groups.set(info.chatIdentifier, {
+      name: info.displayName || '(group)',
+      count: 0,
+      participants: info.handles.length,
+      participantPhotos,
+      participantNames,
+    });
+  }
+
   const sql = `
     SELECT
       m.ROWID                       AS rowid,
@@ -642,6 +702,7 @@ async function parseSqlite(file, nameMap) {
       m.date_edited                 AS edited,
       m.date_retracted              AS retracted,
       h.id                          AS handle,
+      cmj.chat_id                   AS chat_rowid,
       c.style                       AS chat_style,
       c.display_name                AS chat_name,
       c.chat_identifier             AS chat_id
@@ -665,7 +726,7 @@ async function parseSqlite(file, nameMap) {
 
   while (stmt.step()) {
     const row = stmt.getAsObject();
-    processSqliteRow(row, stats, nameMap);
+    processSqliteRow(row, stats, nameMap, chatInfoMap);
     processed++;
     if ((processed & 0x3FF) === 0) {
       const now = Date.now();
@@ -687,7 +748,7 @@ async function parseSqlite(file, nameMap) {
   self.postMessage({ type: 'done', stats: serialize(stats) });
 }
 
-function processSqliteRow(row, stats, nameMap) {
+function processSqliteRow(row, stats, nameMap, chatInfoMap) {
   const ts = appleDateToMs(row.date);
   const isSent = row.is_from_me === 1;
   const handleId = row.handle || '';
@@ -729,8 +790,10 @@ function processSqliteRow(row, stats, nameMap) {
   // resolution; if the user uploaded a contacts file we look it up here.
   let contactName, address;
   if (isGroup) {
-    address = chatId;
-    contactName = chatName || '(group)';
+    const chatInfo = chatInfoMap && chatInfoMap.get(row.chat_rowid);
+    // use chat_identifier as the stable group key; fall back to chat_id from query
+    address = (chatInfo && chatInfo.chatIdentifier) || chatId;
+    contactName = (chatInfo && chatInfo.displayName) || chatName || '(group)';
   } else {
     address = handleId || chatId;
     contactName = (nameMap && lookupContactName(address, nameMap)) || address;
@@ -765,6 +828,11 @@ function recordMessageImsg(stats, isSent, ts, address, contactName, text, isGrou
   if (isSent) stats.charsSent += len; else stats.charsRecv += len;
 
   bucketMessage(stats, isSent, ts, address, contactName, isGroup, 'imsg');
+
+  if (!isGroup) {
+    const c = stats.contacts.get(contactKey(address, contactName));
+    if (c) trackRun(c, isSent, text);
+  }
 
   if (text) {
     if (len > stats.longestBody.len && len < 5000) {
@@ -824,7 +892,7 @@ function bucketMessage(stats, isSent, ts, address, contactName, isGroup) {
     if (!c) {
       const display = (contactName && contactName !== '(Unknown)') ? contactName : (address || 'unknown');
       const photo = stats.nameMap ? lookupContactPhoto(address, stats.nameMap) : null;
-      c = { displayName: display, sent: 0, recv: 0, total: 0, charsSent: 0, charsRecv: 0, photo, address: address || '' };
+      c = { displayName: display, sent: 0, recv: 0, total: 0, charsSent: 0, charsRecv: 0, photo, address: address || '', curRun: 0, maxRun: 0, curMessages: [], maxMessages: [] };
       stats.contacts.set(key, c);
     } else if (!c.photo && stats.nameMap) {
       const photo = lookupContactPhoto(address, stats.nameMap);
@@ -832,6 +900,9 @@ function bucketMessage(stats, isSent, ts, address, contactName, isGroup) {
     }
     if (isSent) c.sent++; else c.recv++;
     c.total++;
+    // run tracking with text is handled by callers (recordMessage / recordMessageImsg)
+    // for reaction-only bucketMessage calls, just reset on recv
+    if (!isSent) { c.curRun = 0; c.curMessages = []; }
   }
 }
 
@@ -967,6 +1038,14 @@ function serialize(s) {
     .filter(c => !/^\d{1,7}$/.test(c.displayName))
     .slice(0, 25);
 
+  // longest run of consecutive sent messages before any reply, across all 1:1 contacts
+  let longestSentRun = null;
+  for (const c of topContacts) {
+    if (c.maxRun && (!longestSentRun || c.maxRun > longestSentRun.count)) {
+      longestSentRun = { count: c.maxRun, displayName: c.displayName, photo: c.photo, messages: (c.maxMessages || []).filter(Boolean) };
+    }
+  }
+
   const groups = Array.from(s.groups.values())
     .sort((a, b) => b.count - a.count)
     .slice(0, 15);
@@ -1080,6 +1159,7 @@ function serialize(s) {
       streakStart, streakEnd,
       busiest,
       longestBody: s.longestBody,
+      longestSentRun,
     },
     topContacts,
     groups,

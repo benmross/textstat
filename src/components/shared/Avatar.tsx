@@ -73,12 +73,10 @@ export function AvatarStack({
   entries,
   limit = 5,
   size = "sm",
-  accentColor,
 }: {
   entries: AvatarEntry[];
   limit?: number;
   size?: "sm" | "md" | "lg" | "xl";
-  accentColor?: string;
 }) {
   const visible = entries.slice(0, limit);
   const extra = Math.max(0, entries.length - limit);
@@ -88,12 +86,8 @@ export function AvatarStack({
       {visible.map((entry, i) => (
         <div
           key={i}
-          className="-ml-2 first:ml-0"
-          style={{
-            boxShadow: accentColor
-              ? `0 4px 14px -4px rgba(0,0,0,.35), inset 0 0 0 2px rgba(255,255,255,.22), 0 0 0 2px ${accentColor}`
-              : undefined,
-          }}
+          className="-ml-2 first:ml-0 rounded-full"
+          style={{ boxShadow: "0 0 0 2px rgba(255,255,255,0.4)" }}
         >
           <Avatar entry={entry} size={size} />
         </div>
