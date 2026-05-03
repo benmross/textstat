@@ -26,9 +26,61 @@ function showScreen(id) {
   $('#' + id).classList.add('visible');
 }
 
+// ---------- platform selection ----------
+
+let pickedPlatform = null; // 'iphone' | 'android' | null
+
+const pickPlatform = $('#pickPlatform');
+const platformGuide = $('#platformGuide');
+const guideIphone = $('#guideIphone');
+const guideAndroid = $('#guideAndroid');
+const dbFileInput = $('#dbFileInput');
+const dbDropLabel = $('#dbDropLabel');
+const dbDropHint = $('#dbDropHint');
+
+$('#pickIphone').addEventListener('click', () => selectPlatform('iphone'));
+$('#pickAndroid').addEventListener('click', () => selectPlatform('android'));
+$('#backToPick').addEventListener('click', () => {
+  pickedPlatform = null;
+  resetUploads();
+  pickPlatform.classList.remove('hidden');
+  platformGuide.classList.add('hidden');
+  guideIphone.classList.add('hidden');
+  guideAndroid.classList.add('hidden');
+});
+
+function selectPlatform(platform) {
+  pickedPlatform = platform;
+  pickPlatform.classList.add('hidden');
+  platformGuide.classList.remove('hidden');
+
+  if (platform === 'iphone') {
+    guideIphone.classList.remove('hidden');
+    guideAndroid.classList.add('hidden');
+    dbFileInput.setAttribute('accept', '.db,application/x-sqlite3,application/octet-stream');
+    dbDropLabel.textContent = 'Click or drag your chat.db here';
+    dbDropHint.textContent = '~/Library/Messages/chat.db';
+  } else {
+    guideAndroid.classList.remove('hidden');
+    guideIphone.classList.add('hidden');
+    dbFileInput.setAttribute('accept', '.xml,application/xml,text/xml');
+    dbDropLabel.textContent = 'Click or drag your .xml backup here';
+    dbDropHint.textContent = 'sms-*.xml from SMS Backup & Restore';
+  }
+}
+
+// Copy-to-clipboard for the iPhone path
+$('#copyPathBtn').addEventListener('click', () => {
+  navigator.clipboard.writeText('~/Library/Messages/chat.db').then(() => {
+    const btn = $('#copyPathBtn');
+    btn.textContent = '✓ copied!';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = '⧉ copy'; btn.classList.remove('copied'); }, 1800);
+  }).catch(() => {});
+});
+
 // ---------- file handling ----------
 
-const dbFileInput = $('#dbFileInput');
 const contactsFileInput = $('#contactsFileInput');
 const dbDropzone = $('#dbDropzone');
 const contactsDropzone = $('#contactsDropzone');
@@ -152,6 +204,16 @@ function updateStartBtn() {
     $('#startBtnReady').classList.add('hidden');
     $('#startBtnWait').classList.remove('hidden');
   }
+}
+
+function resetUploads() {
+  dbFile = null;
+  contactsFile = null;
+  dbFileInput.value = '';
+  contactsFileInput.value = '';
+  updateDbChip();
+  updateContactsChip();
+  updateStartBtn();
 }
 
 $('#dbChipX').addEventListener('click', e => {

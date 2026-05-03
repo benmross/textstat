@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>textstat — your year in messages</title>
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<main id="app">
+
+  <!-- LANDING — step-by-step wizard -->
+  <section id="landing" class="screen visible">
+    <div class="landing-bg">
+      <span class="blob blob-a"></span>
+      <span class="blob blob-b"></span>
+      <span class="blob blob-c"></span>
+    </div>
+
+    <div class="landing-inner">
+
+      <!-- brand (always visible) -->
+      <div class="brand">
+        <span class="brand-mark">✺</span>
+        <span class="brand-name">textstat</span>
+      </div>
+
+      <!-- Phase 1 — Platform picker -->
+      <div id="pickPlatform" class="landing-phase">
+        <h1 class="landing-title">
+          Your year<br/>
+          <span class="grad-text">in messages.</span>
+        </h1>
+        <p class="landing-sub">
+          See a Spotify-Wrapped-style story of every text you sent, every
+          contact you obsessed over, every emoji you wore out — all 100%
+          private, nothing leaves your device.
+        </p>
+
+        <h2 class="phase-heading">First — what kind of phone?</h2>
+
+        <div class="platform-grid">
+          <button id="pickIphone" class="platform-card">
+            <div class="platform-icon">🍎</div>
+            <div class="platform-label">iPhone</div>
+            <div class="platform-hint">iMessage · chat.db</div>
+          </button>
+          <button id="pickAndroid" class="platform-card">
+            <div class="platform-icon">🤖</div>
+            <div class="platform-label">Android</div>
+            <div class="platform-hint">SMS Backup &amp; Restore</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- Phase 2 — Platform guide + upload -->
+      <div id="platformGuide" class="landing-phase hidden">
+        <button id="backToPick" class="back-btn">← Choose a different phone</button>
+
+        <!-- ── iPhone guide ── -->
+        <div id="guideIphone" class="guide-content hidden">
+          <h2 class="phase-heading">You'll need your Mac for this</h2>
+
+          <div class="guide-steps">
+            <div class="guide-step">
+              <div class="guide-step-num">1</div>
+              <div class="guide-step-body">
+                <p>Open <strong>Finder</strong> on your Mac.</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">2</div>
+              <div class="guide-step-body">
+                <p>Press <kbd>⌘ Cmd</kbd> + <kbd>⇧ Shift</kbd> + <kbd>G</kbd>
+                (or click <em>Go &rarr; Go to Folder…</em> in the menu bar).</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">3</div>
+              <div class="guide-step-body">
+                <p>Paste this path into the box and press <strong>Go</strong>:</p>
+                <div class="path-copy">
+                  <code>~/Library/Messages/chat.db</code>
+                  <button id="copyPathBtn" class="copy-btn" title="Copy to clipboard">⧉ copy</button>
+                </div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">4</div>
+              <div class="guide-step-body">
+                <p>Drag <code>chat.db</code> into the drop zone below.</p>
+                <div class="screenshot-pending">
+                  <span>[ Screenshot: Finder window showing chat.db ]</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Android guide ── -->
+        <div id="guideAndroid" class="guide-content hidden">
+          <h2 class="phase-heading">You'll need the SMS Backup &amp; Restore app</h2>
+
+          <div class="guide-steps">
+            <div class="guide-step">
+              <div class="guide-step-num">1</div>
+              <div class="guide-step-body">
+                <p>Install <a href="https://play.google.com/store/apps/details?id=com.riteshsahu.SMSBackupRestore" target="_blank" rel="noopener">SMS Backup &amp; Restore</a> from the Google Play Store.</p>
+                <div class="screenshot-pending">
+                  <span>[ Screenshot: Play Store listing ]</span>
+                </div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">2</div>
+              <div class="guide-step-body">
+                <p>Open the app and tap <strong>SET UP A BACKUP</strong>.</p>
+                <div class="screenshot-pending">
+                  <span>[ Screenshot: SMS Backup &amp; Restore home screen ]</span>
+                </div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">3</div>
+              <div class="guide-step-body">
+                <p>Make sure <strong>Messages</strong> (SMS &amp; MMS) is toggled on.
+                Choose where to save the backup, then tap <strong>BACK UP NOW</strong>.</p>
+                <div class="screenshot-pending">
+                  <span>[ Screenshot: Backup settings screen ]</span>
+                </div>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">4</div>
+              <div class="guide-step-body">
+                <p>Transfer the XML file to your computer (email, Google Drive, USB, etc.).</p>
+                <p>It will be named something like <code>sms-2025-12-31.xml</code>.</p>
+              </div>
+            </div>
+            <div class="guide-step">
+              <div class="guide-step-num">5</div>
+              <div class="guide-step-body">
+                <p>Drag that <code>.xml</code> file into the drop zone below.</p>
+                <div class="screenshot-pending">
+                  <span>[ Screenshot: XML file on your desktop ]</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Upload area (shared) -->
+        <div class="guide-upload">
+          <h3 class="phase-subhead">Drop your message data here <span class="req">*</span></h3>
+
+          <div id="dbDropzone" class="dropzone">
+            <input type="file" id="dbFileInput" hidden />
+            <div class="dropzone-inner">
+              <div class="dropzone-icon db-icon">⇑</div>
+              <div class="dropzone-text">
+                <strong id="dbDropLabel">Click or drag your file here</strong>
+                <span id="dbDropHint">chat.db or sms-*.xml</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="guide-contacts">
+          <h3 class="phase-subhead">
+            Add your contacts <span class="opt">(optional — names &amp; photos in your wrap)</span>
+          </h3>
+
+          <div id="contactsDropzone" class="dropzone">
+            <input type="file" id="contactsFileInput" accept=".vcf,.abcddb,text/vcard,application/octet-stream" hidden />
+            <div class="dropzone-inner">
+              <div class="dropzone-icon contacts-icon">👤</div>
+              <div class="dropzone-text">
+                <strong>Contacts</strong>
+                <span>Drop a <code>.vcf</code> (Export from Contacts app) or <code>.abcddb</code></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <button id="startBtn" class="start-btn" disabled>
+          <span id="startBtnReady" class="hidden">Generate My Wrap ✦</span>
+          <span id="startBtnWait">Drop your message data above</span>
+        </button>
+
+        <div class="file-status" id="fileStatus">
+          <div class="file-chip hidden" id="dbChip">
+            <span class="file-chip-icon">✓</span>
+            <span class="file-chip-text" id="dbChipText"></span>
+            <button class="file-chip-x" id="dbChipX">×</button>
+          </div>
+          <div class="file-chip hidden" id="contactsChip">
+            <span class="file-chip-icon">✓</span>
+            <span class="file-chip-text" id="contactsChipText"></span>
+            <button class="file-chip-x" id="contactsChipX">×</button>
+          </div>
+        </div>
+
+        <div class="features" style="margin-top:1.5rem">
+          <div class="feature"><span class="dot"></span>100% client-side</div>
+          <div class="feature"><span class="dot"></span>Streams 10GB+ files</div>
+          <div class="feature"><span class="dot"></span>Nothing leaves your device</div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- LOADING -->
+  <section id="loading" class="screen">
+    <div class="loading-bg"></div>
+    <div class="loading-inner">
+      <div class="loader-ring"></div>
+      <h2 class="loading-title">cooking your wrapped…</h2>
+      <div class="progress">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="progress-meta">
+          <span id="progressPct">0%</span>
+          <span id="progressMsg">parsing…</span>
+        </div>
+      </div>
+      <ul class="loading-tips" id="loadingTips">
+        <li>did you know you've sent enough texts to fill a small novel?</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- STORY -->
+  <section id="story" class="screen">
+    <div class="story-stage" id="storyStage"></div>
+
+    <div class="story-controls">
+      <button class="ctl-btn" id="prevSlide" aria-label="previous">‹</button>
+      <div class="ctl-bars" id="ctlBars"></div>
+      <button class="ctl-btn" id="nextSlide" aria-label="next">›</button>
+    </div>
+
+    <button class="story-restart" id="restartBtn">↺ start over</button>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
