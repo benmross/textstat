@@ -51,32 +51,43 @@ export function PlatformGuide({
 
       <div className="mt-6">
         <h3 className="mb-2 text-[1.05rem] font-bold tracking-[-0.01em]">
-          Drop your message data here <span className="text-[#ff2e63] font-extrabold">*</span>
+          Drop your Library folder here <span className="text-[#ff2e63] font-extrabold">*</span>
         </h3>
         <Dropzone
           onFileSelected={onDbFile}
           accept={isIphone ? ".db,application/x-sqlite3,application/octet-stream" : ".xml,application/xml,text/xml"}
-          label={isIphone ? "Click or drag your chat.db here" : "Click or drag your .xml backup here"}
-          hint={isIphone ? "~/Library/Messages/chat.db" : "sms-*.xml from SMS Backup & Restore"}
+          label={isIphone ? "Drag your Library folder (or chat.db)" : "Click or drag your .xml backup here"}
+          hint={isIphone ? "messages + contacts extracted automatically" : "sms-*.xml from SMS Backup & Restore"}
           icon={<Upload size={22} />}
           iconBg="linear-gradient(135deg, #ff2e63, #ffd60a)"
           iconShadow="rgba(255,46,99,.45)"
           hasFile={!!dbFile}
+          folderPick={isIphone ? (files) => {
+            const dbs = files.filter(f => f.name.endsWith(".db"));
+            return dbs.find(f => f.name === "chat.db") ?? (dbs.sort((a, b) => b.size - a.size)[0] ?? null);
+          } : undefined}
+          folderPickExtra={isIphone ? (files) => {
+            const abs = files.filter(f => f.name.endsWith(".abcddb"));
+            return abs.sort((a, b) => b.size - a.size)[0] ?? null;
+          } : undefined}
+          onFileExtra={isIphone ? onContactsFile : undefined}
         />
       </div>
 
       <div className="mt-4">
         <h3 className="mb-2 text-[1.05rem] font-bold tracking-[-0.01em]">
-          Add your contacts{" "}
-          <span className="text-[0.8rem] font-normal text-white/50">
-            (optional — names &amp; photos in your wrap)
-          </span>
+          {isIphone ? "Or add contacts separately" : "Add your contacts"}
+          {!isIphone && (
+            <span className="text-[0.8rem] font-normal text-white/50">
+              {" "}(optional — names &amp; photos in your wrap)
+            </span>
+          )}
         </h3>
         <Dropzone
           onFileSelected={onContactsFile}
           accept=".vcf,.abcddb,text/vcard,application/octet-stream"
           label="Contacts"
-          hint="Drop a .vcf (Export from Contacts app) or .abcddb"
+          hint={isIphone ? ".abcddb or .vcf" : "Drop a .vcf file"}
           icon={<User size={22} />}
           iconBg="linear-gradient(135deg, #00d6ff, #aef639)"
           iconShadow="rgba(0,214,255,.45)"

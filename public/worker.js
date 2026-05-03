@@ -473,6 +473,27 @@ function unescapeVcard(s) {
   return s.replace(/\\n/g, '\n').replace(/\\,/g, ',').replace(/\\;/g, ';').replace(/\\\\/g, '\\');
 }
 
+// Convert Uint8Array to base64 string in chunks to avoid stack overflow.
+function uint8ToBase64(bytes) {
+  const CHUNK = 8192;
+  let str = '';
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    str += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(str);
+}
+
+// Extract a data: URL from an AddressBook ZTHUMBNAILIMAGEDATA blob.
+// Apple prepends a single 0x01 version byte before the raw JPEG/PNG payload.
+function abcddPhotoUrl(blob) {
+  if (!blob || blob.length < 4) return null;
+  const start = blob[0] === 0x01 ? 1 : 0;
+  const isJpeg = blob[start] === 0xFF && blob[start + 1] === 0xD8;
+  const isPng  = blob[start] === 0x89 && blob[start + 1] === 0x50;
+  if (!isJpeg && !isPng) return null;
+  return 'data:image/' + (isJpeg ? 'jpeg' : 'png') + ';base64,' + uint8ToBase64(blob.subarray(start));
+}
+
 async function parseAddressBookDb(file) {
   if (typeof self.initSqlJs !== 'function') {
     importScripts('vendor/sql-wasm.js');
@@ -488,14 +509,18 @@ async function parseAddressBookDb(file) {
     stmt = db.prepare(`
       SELECT
         COALESCE(NULLIF(TRIM(COALESCE(R.ZFIRSTNAME,'') || ' ' || COALESCE(R.ZLASTNAME,'')), ''), R.ZORGANIZATION) AS name,
-        P.ZFULLNUMBER AS phone
+        P.ZFULLNUMBER AS phone,
+        R.ZTHUMBNAILIMAGEDATA AS photo
       FROM ZABCDRECORD R
       LEFT JOIN ZABCDPHONENUMBER P ON P.ZOWNER = R.Z_PK
       WHERE P.ZFULLNUMBER IS NOT NULL AND P.ZFULLNUMBER != ''
     `);
     while (stmt.step()) {
       const row = stmt.getAsObject();
-      if (row.name && row.phone) nameMapAdd(map, 'p:' + normalizePhone(row.phone), { name: row.name, photo: null });
+      if (row.name && row.phone) {
+        const photo = row.photo ? abcddPhotoUrl(row.photo) : null;
+        nameMapAdd(map, 'p:' + normalizePhone(row.phone), { name: row.name, photo });
+      }
     }
     stmt.free();
   } catch (e) { /* table may not exist */ }
@@ -503,14 +528,18 @@ async function parseAddressBookDb(file) {
     stmt = db.prepare(`
       SELECT
         COALESCE(NULLIF(TRIM(COALESCE(R.ZFIRSTNAME,'') || ' ' || COALESCE(R.ZLASTNAME,'')), ''), R.ZORGANIZATION) AS name,
-        E.ZADDRESS AS email
+        E.ZADDRESS AS email,
+        R.ZTHUMBNAILIMAGEDATA AS photo
       FROM ZABCDRECORD R
       LEFT JOIN ZABCDEMAILADDRESS E ON E.ZOWNER = R.Z_PK
       WHERE E.ZADDRESS IS NOT NULL AND E.ZADDRESS != ''
     `);
     while (stmt.step()) {
       const row = stmt.getAsObject();
-      if (row.name && row.email) nameMapAdd(map, 'e:' + row.email.toLowerCase().trim(), { name: row.name, photo: null });
+      if (row.name && row.email) {
+        const photo = row.photo ? abcddPhotoUrl(row.photo) : null;
+        nameMapAdd(map, 'e:' + row.email.toLowerCase().trim(), { name: row.name, photo });
+      }
     }
     stmt.free();
   } catch (e) { /* table may not exist */ }

@@ -1,88 +1,44 @@
 "use client";
 
-import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Copy } from "lucide-react";
+
+const kbd = (label: string) => (
+  <kbd className="rounded-md border border-white/20 bg-white/10 px-[0.45rem] py-[0.15rem] font-mono text-[0.85em]">
+    {label}
+  </kbd>
+);
 
 export function IphoneGuide() {
-  const [copied, setCopied] = useState(false);
-
-  const handleCopy = () => {
-    navigator.clipboard
-      .writeText("~/Library/Messages/chat.db")
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1800);
-      })
-      .catch(() => {});
-  };
-
   const steps = [
     {
       step: 1,
-      body: (
-        <p>
-          Open <strong className="text-[#ffd60a]">Finder</strong> on your Mac.
-        </p>
-      ),
+      body: <p>Open <strong className="text-[#ffd60a]">Finder</strong> on your Mac.</p>,
     },
     {
       step: 2,
       body: (
         <p>
-          Press{" "}
-          <kbd className="rounded-md border border-white/20 bg-white/10 px-[0.45rem] py-[0.15rem] font-mono text-[0.85em]">
-            ⌘ Cmd
-          </kbd>{" "}
-          +{" "}
-          <kbd className="rounded-md border border-white/20 bg-white/10 px-[0.45rem] py-[0.15rem] font-mono text-[0.85em]">
-            ⇧ Shift
-          </kbd>{" "}
-          +{" "}
-          <kbd className="rounded-md border border-white/20 bg-white/10 px-[0.45rem] py-[0.15rem] font-mono text-[0.85em]">
-            G
-          </kbd>{" "}
-          (or click <em>Go → Go to Folder…</em> in the menu bar).
+          Press {kbd("⌘")} + {kbd("⇧")} + {kbd("H")} to go to your home folder.
         </p>
       ),
     },
     {
       step: 3,
       body: (
-        <>
-          <p>
-            Paste this path into the box and press <strong>Go</strong>:
-          </p>
-          <div className="inline-flex max-w-full items-center gap-2 overflow-hidden rounded-[10px] border border-white/15 bg-black/25 p-[0.55rem_0.75rem]">
-            <code className="overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[0.85rem]">
-              ~/Library/Messages/chat.db
-            </code>
-            <button
-              onClick={handleCopy}
-              className={`inline-flex items-center gap-1 flex-none rounded-lg border border-white/15 bg-white/10 px-[0.6rem] py-[0.25rem] font-mono text-xs font-semibold transition-colors whitespace-nowrap ${
-                copied
-                  ? "text-[#aef639] bg-[#aef63926]"
-                  : "text-[#ffd60a] hover:bg-white/20"
-              }`}
-            >
-              {copied ? (
-                <><Check size={11} strokeWidth={2.5} />copied!</>
-              ) : (
-                <><Copy size={11} strokeWidth={2} />copy</>
-              )}
-            </button>
-          </div>
-        </>
+        <p>
+          Press {kbd("⌘")} + {kbd("⇧")} + {kbd(".")} to reveal hidden folders.
+          A <strong className="text-[#ffd60a]">Library</strong> folder will appear.
+        </p>
       ),
     },
     {
       step: 4,
       body: (
-        <>
-          <p>
-            Drag <code className="rounded-md bg-white/10 px-[0.45rem] py-[0.15rem] font-mono text-[0.9em]">chat.db</code> into the drop zone below.
-          </p>
-        </>
+        <p>
+          Drag the <strong className="text-[#ffd60a]">Library</strong> folder into
+          the drop zone below. Your messages and contacts will both be found
+          automatically.
+        </p>
       ),
     },
   ];
