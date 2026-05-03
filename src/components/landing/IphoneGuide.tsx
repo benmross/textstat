@@ -68,7 +68,7 @@ export function IphoneGuide({
         <div className="flex flex-1 flex-col gap-[0.45rem] text-[0.95rem] leading-[1.45] text-white/90 max-md:text-sm">
           <p>
             Open <strong className="text-[#ffd60a]">Finder</strong> and press{" "}
-            {kbd("⌘")} + {kbd("⇧")} + {kbd("G")} to open Go to Folder.
+            {kbd("⌘ Command")} + {kbd("⇧ Shift")} + {kbd("G")} to open Go to Folder.
           </p>
         </div>
       </div>
@@ -115,7 +115,7 @@ export function IphoneGuide({
         </div>
         <div className="flex flex-1 flex-col gap-[0.45rem] text-[0.95rem] leading-[1.45] text-white/90 max-md:text-sm">
           <p>
-            Select all contacts ({kbd("⌘")} + {kbd("A")}).
+            Select all contacts ({kbd("⌘ Command")} + {kbd("A")}).
           </p>
         </div>
       </div>
