@@ -50,6 +50,10 @@ chat.db
 # user-provided contacts exports (PII: names, phone numbers, photos)
 *.vcf
 *.abcddb
+*.abcddb-*
+*.aclcddb
+*.aclcddb-*
+AddressBook/
 
 # local sample / scratch data
 imessage_sample/
