@@ -48,50 +48,55 @@ export function PlatformGuide({
         ← Choose a different phone
       </button>
 
-      {isIphone ? <IphoneGuide /> : <AndroidGuide />}
+      {isIphone ? (
+        <IphoneGuide
+          dbFile={dbFile}
+          contactsFile={contactsFile}
+          onDbFile={onDbFile}
+          onContactsFile={onContactsFile}
+        />
+      ) : (
+        <AndroidGuide />
+      )}
 
-      <div className="mt-6 flex flex-col gap-3">
-        <div>
-          <h3 className="mb-2 text-[1.05rem] font-bold tracking-[-0.01em]">
-            Messages <span className="text-[#ff2e63] font-extrabold">*</span>
-          </h3>
-          <Dropzone
-            onFileSelected={onDbFile}
-            accept={isIphone ? ".db,application/x-sqlite3,application/octet-stream" : ".xml,application/xml,text/xml"}
-            label={isIphone ? "chat.db" : "Click or drag your .xml backup here"}
-            hint={isIphone ? "~/Library/Messages/chat.db" : "sms-*.xml from SMS Backup & Restore"}
-            icon={<Upload size={22} />}
-            iconBg="linear-gradient(135deg, #ff2e63, #ffd60a)"
-            iconShadow="rgba(255,46,99,.45)"
-            hasFile={!!dbFile}
-          />
-        </div>
+      {!isIphone && (
+        <div className="mt-6 flex flex-col gap-3">
+          <div>
+            <h3 className="mb-2 text-[1.05rem] font-bold tracking-[-0.01em]">
+              Messages <span className="text-[#ff2e63] font-extrabold">*</span>
+            </h3>
+            <Dropzone
+              onFileSelected={onDbFile}
+              accept=".xml,application/xml,text/xml"
+              label="Click or drag your .xml backup here"
+              hint="sms-*.xml from SMS Backup & Restore"
+              icon={<Upload size={22} />}
+              iconBg="linear-gradient(135deg, #ff2e63, #ffd60a)"
+              iconShadow="rgba(255,46,99,.45)"
+              hasFile={!!dbFile}
+            />
+          </div>
 
-        <div>
-          <h3 className="mb-2 text-[1.05rem] font-bold tracking-[-0.01em]">
-            Contacts{isIphone && <span className="text-[#ff2e63] font-extrabold"> *</span>}
-            {!isIphone && (
+          <div>
+            <h3 className="mb-2 text-[1.05rem] font-bold tracking-[-0.01em]">
+              Contacts
               <span className="text-[0.8rem] font-normal text-white/50">
                 {" "}(optional — names &amp; photos in your wrap)
               </span>
-            )}
-          </h3>
-          <Dropzone
-            onFileSelected={onContactsFile}
-            accept=".vcf,.abcddb,text/vcard,application/octet-stream"
-            label={isIphone ? "AddressBook folder or .abcddb" : "Contacts (.vcf)"}
-            hint={isIphone ? "~/Library/Application Support/AddressBook" : "exported from your contacts app"}
-            icon={<User size={22} />}
-            iconBg="linear-gradient(135deg, #00d6ff, #aef639)"
-            iconShadow="rgba(0,214,255,.45)"
-            hasFile={!!contactsFile}
-            folderPick={isIphone ? (files) => {
-              const abs = files.filter(f => f.name.endsWith(".abcddb"));
-              return abs.sort((a, b) => b.size - a.size)[0] ?? null;
-            } : undefined}
-          />
+            </h3>
+            <Dropzone
+              onFileSelected={onContactsFile}
+              accept=".vcf,text/vcard"
+              label="Contacts (.vcf)"
+              hint="exported from your contacts app"
+              icon={<User size={22} />}
+              iconBg="linear-gradient(135deg, #00d6ff, #aef639)"
+              iconShadow="rgba(0,214,255,.45)"
+              hasFile={!!contactsFile}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       <motion.button
         whileHover={canStart ? { y: -2 } : undefined}

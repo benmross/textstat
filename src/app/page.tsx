@@ -70,7 +70,7 @@ export default function Home() {
       const ok = await classifyContacts(file);
       if (!ok) {
         alert(
-          "That doesn't look like a contacts file (.vcf or .abcddb). Try another?"
+          "That doesn't look like a vCard contacts file (.vcf). Try another?"
         );
         return;
       }
