@@ -78,6 +78,10 @@ npm run build        # TypeScript + production build
 npm run lint
 ```
 
+Open [`http://localhost:3000/mock`](http://localhost:3000/mock) to review the
+complete 19-slide experience with synthetic data. It bypasses importing and
+activates every conditional slide; no backup is needed.
+
 Next.js 16 (App Router) · TypeScript · Tailwind v4 · shadcn/ui · Framer Motion.
 SQLite is read via [sql.js](https://sql.js.org/) compiled to WebAssembly, vendored
 under `public/vendor/`. There are no runtime dependencies beyond the bundle.
@@ -110,9 +114,11 @@ The short version:
 
 ```
 src/app/page.tsx            screen routing + worker orchestration
+src/app/mock/page.tsx       direct-entry mock slideshow for visual review
 src/components/landing/     iPhone-first decision flow, OS guides, backup picker
 src/components/story/       slideshow + 19 slide components
 src/lib/backup.ts           backup discovery (3 browser intake routes)
+src/lib/mock-stats.ts       comprehensive synthetic slideshow fixture
 src/lib/os.ts               OS detection, per-OS backup paths
 public/worker.js            all parsing: XML, SQLite, backup decryption, stats
 ```

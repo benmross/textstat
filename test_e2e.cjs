@@ -73,8 +73,31 @@ async function newPage(browser, platform) {
   const browser = await chromium.launch();
 
   try {
+    // --- mock review route -----------------------------------------------
+    console.log('--- mock slideshow ---');
+    {
+      const ctx = await browser.newContext();
+      const page = await ctx.newPage();
+      page.on('pageerror', (e) => {
+        console.log('   [page error]', e.message);
+        failures++;
+      });
+      await page.goto(`${BASE}/mock`, { waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('text=1 of 19');
+      check('opens directly into the complete slideshow', true);
+      let seen = '';
+      for (let i = 0; i < 19; i++) {
+        seen += ' ' + (await page.textContent('body'));
+        await page.keyboard.press('ArrowRight');
+        await page.waitForTimeout(100);
+      }
+      check('includes mock contacts', /Maya Chen|Alex Rivera/.test(seen));
+      check('includes the final wrap', /Your textstat/i.test(seen));
+      await ctx.close();
+    }
+
     // --- OS detection: Windows -------------------------------------------
-    console.log('--- Windows guide ---');
+    console.log('\n--- Windows guide ---');
     {
       const { ctx, page } = await newPage(browser, 'Windows');
       await page.getByRole('button', { name: /I need to make a backup/i }).click();

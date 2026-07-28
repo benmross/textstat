@@ -21,6 +21,7 @@
 | File | Role |
 |---|---|
 | `src/app/page.tsx` | Main page — screen routing (landing → loading → story), worker orchestration, file validation |
+| `src/app/mock/page.tsx` | Review route — opens the production slideshow directly with comprehensive synthetic data |
 | `src/app/layout.tsx` | Root layout — dark theme, Geist fonts, metadata |
 | `src/app/globals.css` | Tailwind v4 + shadcn theming (dark theme with textstat colors) |
 | `src/components/landing/PlatformPicker.tsx` | Phase 1: iPhone/Android selection cards with Framer Motion hover |
@@ -46,6 +47,7 @@
 | `src/lib/formatting.ts` | Date/number formatting, constants (DOW_NAMES, MONTH_NAMES, etc.) |
 | `src/lib/avatars.ts` | Avatar gradient palette, initials extraction, string hashing |
 | `src/lib/palettes.ts` | Slide color palette definitions + `contrastColor(hex)` helper (returns black/white for readable text on any palette.fg background) |
+| `src/lib/mock-stats.ts` | Typed synthetic fixture for `/mock`; activates all 19 conditional and unconditional slides |
 | `src/types/stats.ts` | TypeScript types for parsed stats data |
 
 #### Slide inventory
@@ -328,7 +330,15 @@ required for these two (stdlib only).
 then runs a full encrypted import through to the slideshow. The test follows the
 situation-first choices (Messages in iCloud / existing backup / new backup),
 asserts the per-slide Share control, and uses a process-specific port by default
-so it can run alongside a developer preview.
+so it can run alongside a developer preview. It also opens `/mock`, asserts that
+all 19 slides are present, and keyboard-navigates through the complete fixture.
+
+### Visual review without a backup
+
+Run the development server and open `http://localhost:3000/mock`. This route
+renders the real `Slideshow` with `MOCK_STATS`, bypassing upload and parsing. Keep
+the fixture comprehensive: any new conditional slide should receive enough mock
+data to appear, and the E2E slide-count assertion should be updated.
 
 **No real backup is needed for any of this** — the fixtures are synthesised.
 
