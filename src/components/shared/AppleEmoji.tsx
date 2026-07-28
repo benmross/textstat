@@ -43,6 +43,9 @@ export function AppleEmoji({ emoji, className, style }: Props) {
   }
 
   return (
+    // A dynamic third-party emoji URL with an onError text fallback is a poor
+    // fit for next/image's build-time sizing and optimization pipeline.
+    // eslint-disable-next-line @next/next/no-img-element
     <img
       src={`${CDN}/${cdnPath(emoji)}.png`}
       alt={emoji}

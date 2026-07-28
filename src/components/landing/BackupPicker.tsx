@@ -158,12 +158,12 @@ export function BackupPicker({
         }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
-        className={`cursor-pointer rounded-[28px] border-2 p-6 transition-all ${
+        className={`cursor-pointer rounded-[22px] border p-5 transition-all ${
           bundle
-            ? "border-solid border-[#aef639] bg-[#aef6390f]"
+            ? "border-solid border-[#70e1a1]/45 bg-[#70e1a1]/[.07]"
             : dragging
-              ? "border-dashed border-[#aef639] bg-[#aef63914]"
-              : "border-dashed border-white/25 bg-white/[0.03] hover:border-[#aef639] hover:bg-[#aef63914]"
+              ? "border-dashed border-[#76b7ff]/60 bg-[#76b7ff]/10"
+              : "border-dashed border-white/20 bg-white/[0.035] hover:border-[#76b7ff]/55 hover:bg-[#76b7ff]/[.07]"
         }`}
       >
         <div className="flex items-center gap-4">
@@ -171,9 +171,9 @@ export function BackupPicker({
             className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-2xl text-[#0d0114]"
             style={{
               background: bundle
-                ? "linear-gradient(135deg, #aef639, #00d6ff)"
-                : "linear-gradient(135deg, #ff2e63, #ffd60a)",
-              boxShadow: "0 8px 24px -6px rgba(255,46,99,.45)",
+                ? "linear-gradient(135deg, #70e1a1, #73cde8)"
+                : "linear-gradient(135deg, #82bcff, #b8a2ed)",
+              boxShadow: "0 8px 24px -6px rgba(90,150,230,.35)",
             }}
           >
             {busy ? (
@@ -192,7 +192,7 @@ export function BackupPicker({
               </strong>
             ) : bundle && info ? (
               <>
-                <strong className="inline-flex items-center gap-2 text-[1rem] font-bold text-[#aef639]">
+                <strong className="inline-flex items-center gap-2 text-[1rem] font-semibold text-[#70e1a1]">
                   <Smartphone size={16} />
                   {info.deviceName || "iPhone backup"}
                 </strong>
@@ -203,7 +203,7 @@ export function BackupPicker({
                 </span>
               </>
             ) : bundle ? (
-              <strong className="text-[1rem] font-bold text-[#aef639]">Backup selected</strong>
+              <strong className="text-[1rem] font-semibold text-[#70e1a1]">Backup selected</strong>
             ) : (
               <>
                 <strong className="text-[1rem] font-bold">
@@ -222,7 +222,7 @@ export function BackupPicker({
         <motion.p
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
-          className="inline-flex items-start gap-2 text-[0.85rem] leading-snug text-[#ffd60a]"
+          className="inline-flex items-start gap-2 text-[0.85rem] leading-snug text-[#ffcc70]"
         >
           <TriangleAlert size={15} className="mt-[2px] flex-none" />
           {error}
@@ -236,7 +236,7 @@ export function BackupPicker({
           className="flex flex-col gap-2 rounded-[18px] border border-white/15 bg-black/25 p-4"
         >
           <label className="inline-flex items-center gap-2 text-[0.9rem] font-semibold">
-            <Lock size={15} className="text-[#ffd60a]" />
+            <Lock size={15} className="text-[#ffcc70]" />
             This backup is encrypted — enter its password
           </label>
           <input
@@ -245,14 +245,14 @@ export function BackupPicker({
             value={password}
             onChange={(e) => onPassword(e.target.value)}
             placeholder="Backup password"
-            className="w-full rounded-xl border border-white/20 bg-black/40 px-3 py-2 text-[0.95rem] outline-none transition-colors focus:border-[#aef639]"
+            className="w-full rounded-xl border border-white/20 bg-black/30 px-3 py-2 text-[0.95rem] outline-none transition-colors focus:border-[#76b7ff]"
           />
           <span className="text-[0.78rem] leading-snug text-white/55">
             The password you set when you first encrypted backups — not your Apple
             Account password. It never leaves this page.
           </span>
           {passwordError && (
-            <span className="text-[0.82rem] font-semibold text-[#ff2e63]">
+            <span className="text-[0.82rem] font-semibold text-[#ff8c95]">
               {passwordError}
             </span>
           )}

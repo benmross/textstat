@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { SlideShell } from "@/components/story/SlideShell";
 import { Avatar } from "@/components/shared/Avatar";
@@ -18,39 +18,38 @@ export function LongestSentRunSlide({ stats, palette, isCurrent }: Props) {
   const run = stats.summary.longestSentRun;
   const scrollRef = useRef<HTMLDivElement>(null);
   const userScrolled = useRef(false);
-  const [ready, setReady] = useState(false);
 
-  // mark ready after entrance animation gives time to paint
+  // Wait for the entrance animation, then auto-scroll. Refs track user intent
+  // without adding a render-only "ready" state.
   useEffect(() => {
-    if (!isCurrent) { setReady(false); userScrolled.current = false; return; }
-    const t = setTimeout(() => setReady(true), 600);
-    return () => clearTimeout(t);
-  }, [isCurrent]);
-
-  // auto-scroll to bottom, slowly, once ready
-  useEffect(() => {
+    userScrolled.current = false;
     const el = scrollRef.current;
-    if (!ready || !el || userScrolled.current) return;
-
-    const dist = el.scrollHeight - el.clientHeight;
-    if (dist <= 0) return;
-
-    const duration = Math.min(dist * 5, 8000); // ~5ms per px, max 8s
-    const start = performance.now();
-    const startTop = el.scrollTop;
     let raf: number;
 
-    function step(now: number) {
-      if (!el || userScrolled.current) return;
-      const t = Math.min((now - start) / duration, 1);
-      // ease-in-out cubic
-      const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-      el.scrollTop = startTop + dist * ease;
-      if (t < 1) raf = requestAnimationFrame(step);
-    }
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [ready]);
+    const timer = window.setTimeout(() => {
+      if (!isCurrent || !el || userScrolled.current) return;
+      const dist = el.scrollHeight - el.clientHeight;
+      if (dist <= 0) return;
+
+      const duration = Math.min(dist * 5, 8000);
+      const start = performance.now();
+      const startTop = el.scrollTop;
+
+      function step(now: number) {
+        if (!el || userScrolled.current) return;
+        const t = Math.min((now - start) / duration, 1);
+        const ease = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        el.scrollTop = startTop + dist * ease;
+        if (t < 1) raf = requestAnimationFrame(step);
+      }
+      raf = requestAnimationFrame(step);
+    }, 600);
+
+    return () => {
+      window.clearTimeout(timer);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [isCurrent]);
 
   // detect user-initiated scroll intent (wheel / touch) — NOT fired by programmatic scrollTop changes
   function onUserScrollIntent() {

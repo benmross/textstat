@@ -25,25 +25,25 @@ export function LoadingScreen({
   const tipIndex = Math.floor(progress / 14) % TIPS.length;
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-[radial-gradient(1200px_700px_at_50%_0%,rgba(108,37,196,.45),transparent_60%),radial-gradient(800px_500px_at_50%_100%,rgba(255,46,99,.35),transparent_60%),#100023]">
-      <div className="w-[min(560px,90vw)] text-center">
+    <div className="landing-canvas fixed inset-0 flex items-center justify-center">
+      <div className="glass-panel w-[min(560px,90vw)] p-8 text-center sm:p-12">
         <div
           className="mx-auto mb-7 h-[88px] w-[88px] animate-spin rounded-full bg-[conic-gradient(from_0deg,#ff2e63,#ffd60a,#aef639,#00d6ff,#6c25c4,#ff2e63)]"
           style={{
-            mask: "radial-gradient(circle 30px at 50% 50%, transparent 98%, black 100%)",
+            mask: "radial-gradient(circle 34px at 50% 50%, transparent 98%, black 100%)",
             WebkitMask:
-              "radial-gradient(circle 30px at 50% 50%, transparent 98%, black 100%)",
+              "radial-gradient(circle 34px at 50% 50%, transparent 98%, black 100%)",
           }}
         />
 
         <h2 className="mb-6 text-[clamp(1.6rem,3vw,2.2rem)] font-extrabold tracking-[-0.02em]">
-          cooking your wrapped…
+          Reading your messages…
         </h2>
 
         <div className="flex flex-col gap-2">
           <div className="h-[14px] w-full overflow-hidden rounded-full bg-white/[0.08]">
             <motion.div
-              className="h-full rounded-full bg-gradient-to-r from-[#ff2e63] via-[#ffd60a] to-[#aef639] shadow-[0_0_22px_rgba(255,214,10,.4)]"
+              className="h-full rounded-full bg-gradient-to-r from-[#76b7ff] via-[#c3afff] to-[#78dfd2] shadow-[0_0_22px_rgba(118,183,255,.35)]"
               style={{ width: `${pct}%` }}
               transition={{ duration: 0.25 }}
             />

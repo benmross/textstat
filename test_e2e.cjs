@@ -1,7 +1,7 @@
 // End-to-end browser test of the iPhone import flow.
 //
 // Serves the production build, then drives a real Chromium through the whole
-// path: OS detection → guide copy → folder pick → backup probe → password →
+// path: OS detection → situation choice → folder pick → backup probe → password →
 // decrypt → parse → slideshow.
 //
 // Run: node test_e2e.cjs   (expects `npm run build` to have been run first)
@@ -14,7 +14,9 @@ const { spawn } = require('node:child_process');
 const { chromium } = require('playwright');
 const { buildBackup } = require('./test_backup_fixture.cjs');
 
-const PORT = 3111;
+// Use a process-specific port so a developer's running preview does not make
+// the suite fail before Chromium starts. Override when a fixed port is useful.
+const PORT = Number(process.env.TEXTSTAT_E2E_PORT) || 32000 + (process.pid % 1000);
 const BASE = `http://127.0.0.1:${PORT}`;
 
 let failures = 0;
@@ -50,8 +52,7 @@ async function newPage(browser, platform) {
     failures++;
   });
   await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await page.getByText('iPhone', { exact: false }).first().click();
-  await page.waitForSelector('text=Point us at your iPhone backup');
+  await page.waitForSelector('text=Bring your messages in.');
   return { ctx, page };
 }
 
@@ -76,6 +77,7 @@ async function newPage(browser, platform) {
     console.log('--- Windows guide ---');
     {
       const { ctx, page } = await newPage(browser, 'Windows');
+      await page.getByRole('button', { name: /I need to make a backup/i }).click();
       const storeLink = page.locator('a[href*="apps.microsoft.com"]');
       check('offers the Apple Devices Store link', (await storeLink.count()) === 1);
       check(
@@ -83,7 +85,7 @@ async function newPage(browser, platform) {
         (await storeLink.getAttribute('href')) === 'https://apps.microsoft.com/detail/9NP83LWLPZ9K'
       );
       const body = await page.textContent('body');
-      check('names the Apple Devices app', body.includes('the Apple Devices app'));
+      check('names the Apple Devices app', body.includes('Apple Devices'));
       check('shows the Apple Devices backup path', body.includes('%USERPROFILE%\\Apple\\MobileSync\\Backup'));
       check('shows the legacy iTunes path', body.includes('%APPDATA%\\Apple Computer\\MobileSync\\Backup'));
       check('does not mention Finder', !body.includes('Finder'));
@@ -94,11 +96,19 @@ async function newPage(browser, platform) {
     console.log('\n--- macOS guide ---');
     {
       const { ctx, page } = await newPage(browser, 'macOS');
+      check(
+        'offers the Messages in iCloud fast path',
+        (await page.getByRole('button', { name: /Messages in iCloud/i }).count()) === 1
+      );
+      await page.getByRole('button', { name: /Messages in iCloud/i }).click();
       const body = await page.textContent('body');
       check('names Finder', body.includes('Finder'));
-      check('shows the mac backup path', body.includes('~/Library/Application Support/MobileSync/Backup'));
       check('hides the Windows Store step', (await page.locator('a[href*="apps.microsoft.com"]').count()) === 0);
       check('offers the chat.db shortcut', body.includes('~/Library/Messages/chat.db'));
+      await page.getByRole('button', { name: /Choose another route/i }).click();
+      await page.getByRole('button', { name: /already have a backup/i }).click();
+      const backupBody = await page.textContent('body');
+      check('shows the mac backup path', backupBody.includes('~/Library/Application Support/MobileSync/Backup'));
       await ctx.close();
     }
 
@@ -106,6 +116,7 @@ async function newPage(browser, platform) {
     console.log('\n--- full encrypted import ---');
     {
       const { ctx, page } = await newPage(browser, 'Windows');
+      await page.getByRole('button', { name: /already have a backup/i }).click();
 
       // Point the directory input at the Backup root, so the test also covers
       // finding the device folder underneath it.
@@ -116,7 +127,7 @@ async function newPage(browser, platform) {
       const body = await page.textContent('body');
       check('reports iOS version', body.includes('iOS 18.3.1'));
       check('notices the contacts db', body.includes('contacts found'));
-      check('collapses the setup steps once ready', body.includes('Backup ready'));
+      check('keeps the selected backup visible', body.includes(fixture.deviceName));
 
       const pwField = page.locator('input[type=password]');
       check('asks for the backup password', (await pwField.count()) === 1);
@@ -134,7 +145,8 @@ async function newPage(browser, platform) {
       await page.waitForTimeout(2500);
 
       const storyText = await page.textContent('body');
-      check('reached the slideshow', !storyText.includes('Point us at your iPhone backup'));
+      check('reached the slideshow', !storyText.includes('Bring your messages in.'));
+      check('offers sharing on every slide', (await page.getByRole('button', { name: /Share this statistic/i }).count()) === 1);
 
       // Walk the slides and collect the text, to prove decrypt+parse produced
       // real aggregates and that contacts resolved to names.
@@ -146,7 +158,7 @@ async function newPage(browser, platform) {
       }
       check('resolved contact names from AddressBook', /Ada Lovelace/.test(seen));
       check('found the group chat', /Weekend Plans/.test(seen));
-      check('counted tapbacks', /tapback/i.test(seen));
+      check('counted reactions', /reaction|tapback/i.test(seen));
       check('built the word cloud', /hilarious|dinner|birthday/i.test(seen));
 
       await page.screenshot({ path: path.join(tmp, 'slide.png') });
@@ -164,6 +176,7 @@ async function newPage(browser, platform) {
         deviceName: "Grace's iPhone",
       });
       const { ctx, page } = await newPage(browser, 'macOS');
+      await page.getByRole('button', { name: /already have a backup/i }).click();
       await page.setInputFiles('input[type=file]', plainRoot);
       await page.waitForSelector("text=Grace's iPhone", { timeout: 30000 });
       check('reads an unencrypted backup', true);
@@ -171,7 +184,7 @@ async function newPage(browser, platform) {
       await page.getByRole('button', { name: /Generate My Wrap/i }).click();
       await page.waitForTimeout(6000);
       const t = await page.textContent('body');
-      check('parses without a password', !t.includes('Point us at your iPhone backup'));
+      check('parses without a password', !t.includes('Bring your messages in.'));
       await ctx.close();
     }
 
@@ -182,6 +195,7 @@ async function newPage(browser, platform) {
       fs.mkdirSync(junk, { recursive: true });
       fs.writeFileSync(path.join(junk, 'notes.txt'), 'hello');
       const { ctx, page } = await newPage(browser, 'Windows');
+      await page.getByRole('button', { name: /already have a backup/i }).click();
       await page.setInputFiles('input[type=file]', junk);
       await page.waitForSelector('text=No iPhone backup in that folder', { timeout: 15000 });
       check('explains a folder with no backup in it', true);

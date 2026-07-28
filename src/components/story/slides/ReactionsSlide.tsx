@@ -14,6 +14,20 @@ interface ReactionsSlideProps {
   isCurrent: boolean;
 }
 
+function ReactionEmoji({
+  emoji,
+  className,
+  useApple,
+}: {
+  emoji: string;
+  className?: string;
+  useApple: boolean;
+}) {
+  return useApple
+    ? <AppleEmoji emoji={emoji} className={className} />
+    : <span className={className} style={{ fontFamily: "'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif" }}>{emoji}</span>;
+}
+
 export function ReactionsSlide({
   stats,
   palette,
@@ -30,11 +44,6 @@ export function ReactionsSlide({
     animate: isCurrent ? { opacity: 1, y: 0 } : { opacity: 0, y: 18 },
     transition: { duration: 0.5, delay: isCurrent ? delay : 0, ease: "easeOut" as const },
   });
-
-  const Emoji = ({ emoji, className }: { emoji: string; className?: string }) =>
-    isImsg
-      ? <AppleEmoji emoji={emoji} className={className} />
-      : <span className={className} style={{ fontFamily: "'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif" }}>{emoji}</span>;
 
   return (
     <SlideShell label="tapbacks" palette={palette} isCurrent={isCurrent}>
@@ -70,7 +79,7 @@ export function ReactionsSlide({
             transition={{ type: "spring", stiffness: 300, damping: 16, delay: isCurrent ? 0.42 : 0 }}
             className="text-[clamp(5rem,16vw,11rem)] leading-none drop-shadow-[0_12px_0_rgba(0,0,0,.1)]"
           >
-            <Emoji emoji={top.emoji} />
+            <ReactionEmoji emoji={top.emoji} useApple={isImsg} />
           </motion.div>
           <motion.div {...fu(0.58)} className="text-[clamp(1.05rem,1.8vw,1.5rem)] opacity-85 max-w-[720px]">
             your favorite reaction · used {fmtNum(top.count)} times
@@ -89,7 +98,7 @@ export function ReactionsSlide({
               className="flex flex-col items-center gap-1 rounded-[18px] border border-white/20 bg-black/15 p-2.5"
             >
               <div className="text-[2.6rem] leading-none">
-                <Emoji emoji={e.emoji} />
+                <ReactionEmoji emoji={e.emoji} useApple={isImsg} />
               </div>
               <div className="font-mono text-sm opacity-80">{fmtNum(e.count)}</div>
             </motion.div>

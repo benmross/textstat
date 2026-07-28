@@ -1,8 +1,8 @@
 # textstat
 
-A Spotify-Wrapped-style story of your texting history — top contacts, busiest
-hours, longest streaks, most-used words and emoji, and a year-at-a-glance
-calendar heatmap.
+A cinematic, Apple-inspired story of your texting history — top contacts,
+busiest hours, longest streaks, most-used words and emoji, and a
+year-at-a-glance calendar heatmap.
 
 **Everything runs in your browser.** Your messages are parsed on your own machine
 by a Web Worker. Nothing is uploaded, there is no backend, and no request carries
@@ -15,14 +15,25 @@ empty while your wrap generates.
 
 ### iPhone
 
-You need your phone, a cable, and a Mac or Windows PC. A local backup is the only
-way message history can leave an iPhone — Apple gives apps no other access — so
-the flow is built around making that as painless as possible.
+The app assumes you are importing from an iPhone and starts by asking which
+situation applies to you:
 
-**Already back up your iPhone to this computer?** Drop the `Backup` folder on the
-page. That's the whole thing.
+- **Messages in iCloud is enabled on a Mac:** use the `chat.db` already synced
+  to the Mac. This skips backup creation entirely. An Address Book database or
+  `.vcf` can be added for contact names and photos.
+- **A local backup already exists:** choose the existing Finder, Apple Devices,
+  or iTunes backup folder.
+- **A backup still needs to be made:** follow the OS-specific visual walkthrough
+  in the app, then select the resulting folder.
 
-**Otherwise**, textstat detects your OS and walks you through it:
+For the direct Mac route, the files normally live at:
+
+| File | Location |
+|---|---|
+| Messages | `~/Library/Messages/chat.db` |
+| Contacts | `~/Library/Application Support/AddressBook/Sources` |
+
+For local backups:
 
 | | macOS | Windows |
 |---|---|---|
@@ -30,11 +41,9 @@ page. That's the whole thing.
 | Backups live in | `~/Library/Application Support/MobileSync/Backup` | `%USERPROFILE%\Apple\MobileSync\Backup` |
 | | | or `%APPDATA%\Apple Computer\MobileSync\Backup` on older iTunes |
 
-Unlock your iPhone, plug it in, tap **Trust**, hit **Back Up Now**, then drop the
-folder on the page. Leave the encryption checkbox however it is — encrypted
-backups are handled, you'll just be asked for the password. (That password never
-leaves the page either; it's used with the Web Crypto API to unwrap the backup's
-keybag locally.)
+Leave backup encryption however it is. Encrypted backups are supported and
+prompt for the local backup password. That password never leaves the page; Web
+Crypto uses it to unwrap the backup keybag locally.
 
 Two notes worth knowing:
 
@@ -48,7 +57,15 @@ Two notes worth knowing:
 
 Export your history with [SMS Backup & Restore](https://www.smsbackupandrestore.com/),
 then drop the `.xml` on the page. Optionally add a `.vcf` contacts export for
-names and photos. No computer required — this works in a phone browser.
+names and photos. Use the small **Using Android?** link under the landing-page
+intro to switch import modes. No computer is required.
+
+### Viewing and sharing
+
+The generated story uses fluid glass controls, keyboard navigation, and
+replayable slide animations. Every statistics page—including the final
+summary—has a **Share** action. Supported browsers open the native share sheet;
+other browsers copy a page-specific summary and link to the clipboard.
 
 ---
 
@@ -93,7 +110,7 @@ The short version:
 
 ```
 src/app/page.tsx            screen routing + worker orchestration
-src/components/landing/     platform picker, OS-aware guide, backup picker
+src/components/landing/     iPhone-first decision flow, OS guides, backup picker
 src/components/story/       slideshow + 19 slide components
 src/lib/backup.ts           backup discovery (3 browser intake routes)
 src/lib/os.ts               OS detection, per-OS backup paths
@@ -106,5 +123,5 @@ public/worker.js            all parsing: XML, SQLite, backup decryption, stats
 
 No analytics on your message content, no uploads, no server-side processing. The
 only network requests the app makes are for its own static assets, plus Apple
-emoji images from a CDN when rendering an iMessage wrap. Deployment uses Vercel
+emoji images from a CDN when rendering an iMessage story. Deployment uses Vercel
 Analytics for page views only.

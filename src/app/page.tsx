@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Sparkles } from "lucide-react";
+import { LockKeyhole, MessageCircleMore } from "lucide-react";
 import { BackupInfo, Platform, TextStatStats, Screen } from "@/types/stats";
 import { BackupBundle } from "@/lib/backup";
 import { useDesktopOS } from "@/lib/os";
@@ -14,7 +14,7 @@ import { Slideshow } from "@/components/story/Slideshow";
 
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("landing");
-  const [platform, setPlatform] = useState<Platform | null>(null);
+  const [platform, setPlatform] = useState<Platform>("iphone");
   const os = useDesktopOS();
   const [dbFile, setDbFile] = useState<File | null>(null);
   const [contactsFile, setContactsFile] = useState<File | null>(null);
@@ -34,7 +34,7 @@ export default function Home() {
   }, []);
 
   const handleBack = useCallback(() => {
-    setPlatform(null);
+    setPlatform("iphone");
     setDbFile(null);
     setContactsFile(null);
     setBackup(null);
@@ -192,42 +192,47 @@ export default function Home() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.35 }}
-            className="fixed inset-0 overflow-y-auto bg-[radial-gradient(1200px_800px_at_90%_-10%,rgba(255,46,99,.35),transparent_60%),radial-gradient(1000px_700px_at_-10%_110%,rgba(108,37,196,.45),transparent_60%),radial-gradient(900px_600px_at_50%_50%,rgba(0,214,255,.10),transparent_60%),#0d0114]"
+            className="landing-canvas fixed inset-0 overflow-y-auto"
           >
             <AnimatedBackground />
-            <div className="relative mx-auto w-[min(880px,92vw)] px-0 py-8 pb-16 pt-8">
-              <div className="mb-8 inline-flex items-center gap-[0.55rem] rounded-full border border-white/20 px-[0.9rem] py-[0.35rem] font-mono text-xs uppercase tracking-[0.12em] text-white/85 backdrop-blur-sm">
-                <Sparkles className="text-[#aef639]" size={14} />
-                <span>textstat</span>
-              </div>
+            <div className="relative mx-auto w-[min(1040px,92vw)] pb-20 pt-5 md:pt-8">
+              <nav className="glass-bar sticky top-4 z-30 mb-14 flex items-center justify-between px-4 py-3">
+                <div className="flex items-center gap-2.5 font-semibold tracking-[-0.03em]">
+                  <span className="flex size-8 items-center justify-center rounded-[11px] bg-white text-[#111318] shadow-sm">
+                    <MessageCircleMore size={18} strokeWidth={2.4} />
+                  </span>
+                  textstat
+                </div>
+                <div className="flex items-center gap-2 text-xs text-white/55">
+                  <LockKeyhole size={13} />
+                  Private by design
+                </div>
+              </nav>
 
-              {!platform ? (
-                <PlatformPicker onSelect={handlePlatformSelect} />
-              ) : (
-                <PlatformGuide
-                  platform={platform}
-                  os={os}
-                  onBack={handleBack}
-                  dbFile={dbFile}
-                  contactsFile={contactsFile}
-                  backup={backup}
-                  backupInfo={backupInfo}
-                  probing={probing}
-                  password={password}
-                  passwordError={passwordError}
-                  onDbFile={handleDbFile}
-                  onContactsFile={handleContactsFile}
-                  onBundle={handleBundle}
-                  onSingleFile={handleSingleFile}
-                  onPassword={(p) => {
-                    setPassword(p);
-                    setPasswordError(null);
-                  }}
-                  onRemoveDb={() => setDbFile(null)}
-                  onRemoveContacts={() => setContactsFile(null)}
-                  onStart={handleStart}
-                />
-              )}
+              <PlatformPicker onSelect={handlePlatformSelect} />
+              <PlatformGuide
+                platform={platform}
+                os={os}
+                onBack={handleBack}
+                dbFile={dbFile}
+                contactsFile={contactsFile}
+                backup={backup}
+                backupInfo={backupInfo}
+                probing={probing}
+                password={password}
+                passwordError={passwordError}
+                onDbFile={handleDbFile}
+                onContactsFile={handleContactsFile}
+                onBundle={handleBundle}
+                onSingleFile={handleSingleFile}
+                onPassword={(p) => {
+                  setPassword(p);
+                  setPasswordError(null);
+                }}
+                onRemoveDb={() => setDbFile(null)}
+                onRemoveContacts={() => setContactsFile(null)}
+                onStart={handleStart}
+              />
             </div>
           </motion.div>
         )}

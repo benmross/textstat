@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-**textstat** is a 100% client-side browser app that produces a Spotify-Wrapped-style slideshow from your SMS/iMessage history. Users drop in either a [SMS Backup & Restore](https://www.smsbackupandrestore.com/) XML export or a macOS `chat.db` (the Messages SQLite database), and the app parses everything locally — no data leaves the device.
+**textstat** is a 100% client-side browser app that produces a cinematic, Apple-inspired slideshow from your SMS/iMessage history. Users import an iPhone backup, a synced macOS `chat.db`, or an Android [SMS Backup & Restore](https://www.smsbackupandrestore.com/) XML export, and the app parses everything locally — no data leaves the device.
 
 - **Repo:** [`https://github.com/benmross/textstat`](https://github.com/benmross/textstat) (private)
 - **Frontend:** Next.js 16 (App Router) with TypeScript, Tailwind CSS v4, shadcn/ui v4, Framer Motion, lucide-react (icons), and react-icons (brand logos)
@@ -118,10 +118,16 @@
 ### Screen Flow
 
 ```
-Landing → PlatformPicker (iPhone/Android cards)
+Landing (iPhone-first hero; small Android alternate link)
   ↓
 PlatformGuide
-  ├─ iPhone  → IphoneGuide (OS-detected) → BackupPicker → probe → password?
+  ├─ iPhone / Mac
+  │    ├─ Messages in iCloud → chat.db + optional contacts database
+  │    ├─ existing backup → BackupPicker → probe → password?
+  │    └─ new backup → illustrated Finder walkthrough → BackupPicker
+  ├─ iPhone / Windows
+  │    ├─ existing backup → BackupPicker → probe → password?
+  │    └─ new backup → illustrated Apple Devices walkthrough → BackupPicker
   └─ Android → AndroidGuide + two dropzones
   ↓
 [Generate My Wrap] → LoadingScreen (progress + tips)
@@ -131,11 +137,12 @@ Slideshow (14-16 slides with keyboard nav)
 [↺ start over] → Page reload
 ```
 
-The iPhone guide is **dropzone-first**: the picker sits at the top and the setup
-steps live in a panel below that is expanded by default and collapses itself the
-moment a backup is found (`showSteps = stepsOverride ?? !ready` — derived, not an
-effect, so nothing has to chase `ready`). Anyone who already backs up their phone
-never reads an instruction.
+The iPhone guide is **situation-first**. It asks whether the user has Messages in
+iCloud (Mac only), already has a local backup, or needs to create one. Existing
+backup users go directly to the picker. New-backup users get OS-specific visual
+steps, with explicit screenshot placeholders in `GuideStep` ready for final
+assets. Android is deliberately a small alternate link below the hero rather
+than an equal-weight first-screen choice.
 
 Screen transitions use Framer Motion `AnimatePresence` with opacity fade.
 
@@ -235,6 +242,11 @@ self-verifying so guessing is safe and cheap.
 
 `Slideshow.tsx` builds an array of slide configs with conditional rendering (some slides only show based on available data). Each slide gets a rotating palette from `PALETTES[]`. Navigation: arrow keys, prev/next buttons, progress-bar dots. Framer Motion handles slide transitions.
 
+The story uses restrained Apple-like mesh gradients and a persistent
+backdrop-blurred glass dock. Every slide, including the final wrap, has a Share
+action. It uses the native Web Share sheet when available and copies a
+slide-specific summary plus the site URL to the clipboard otherwise.
+
 ### Avatars
 
 `Avatar` component renders circular avatars from `{ displayName?, name?, contact?, photo? }` objects:
@@ -252,6 +264,13 @@ self-verifying so guessing is safe and cheap.
 - **shadcn/ui v4** — button, card, badge, progress primitives from base-ui/react
 - **Framer Motion** — screen transitions (`AnimatePresence`), blob animations, hover effects, slide transitions
 - **Guided wizard UX** — 2-phase flow (pick platform → guided upload)
+- **iPhone-first import UX** — assumes iPhone, branches by the user’s actual
+  situation, and keeps Android available as a secondary link
+- **Liquid-glass visual system** — reusable `.glass-*` material classes combine
+  translucent gradients, fine borders, inner highlights, saturation, and blur;
+  reduced-motion preferences are respected globally
+- **Share from every story page** — native Web Share with clipboard fallback,
+  using human-readable slide labels from `Slideshow.tsx`
 - **Backup-first for iPhone** — a local backup is the only way `sms.db` leaves the device, so the UI optimises around it instead of pretending otherwise. It also sidesteps the biggest silent failure of the old `chat.db` flow: partial history when Messages in iCloud was never enabled.
 - **OS auto-detected, never asked** — `useDesktopOS()` picks the Apple Devices app + `%USERPROFILE%` paths on Windows, Finder + `~/Library` on macOS. Windows gets a direct Microsoft Store link (product `9NP83LWLPZ9K`) rather than prose describing how to find it.
 - **Encrypted backups are decrypted in-browser, never refused** — telling people to disable encryption would force a *fresh full backup* and silently drop their Health data. Supporting the password is what makes an already-existing backup usable.
@@ -306,15 +325,18 @@ required for these two (stdlib only).
 
 `test_e2e.cjs` needs `npx playwright install chromium` once. It stubs
 `navigator.userAgentData.platform` to assert the Windows and macOS guide variants,
-then runs a full encrypted import through to the slideshow.
+then runs a full encrypted import through to the slideshow. The test follows the
+situation-first choices (Messages in iCloud / existing backup / new backup),
+asserts the per-slide Share control, and uses a process-specific port by default
+so it can run alongside a developer preview.
 
 **No real backup is needed for any of this** — the fixtures are synthesised.
 
 ### Baseline lint state
 
-`npm run lint` reports 3 pre-existing errors (`CalendarHeatmapSlide`,
-`LongestSentRunSlide`, `ReactionsSlide`) and 1 warning (`AppleEmoji`). These predate
-the backup work. Don't treat them as regressions; don't let the count grow either.
+`npm run lint` is clean. `AppleEmoji` intentionally uses a native `<img>` for its
+dynamic third-party CDN URL and runtime `onError` fallback; the relevant Next.js
+lint rule is disabled only on that element with an explanatory comment.
 
 ### Code Conventions
 
@@ -366,5 +388,6 @@ Slides with a proportional split bar (`SentVsReceivedSlide`, `YouTextedMoreSlide
 ### Scrollable Slide Content
 
 `LongestSentRunSlide` has a scrollable message list. Pattern for auto-scroll with user-override:
-- Use a `ready` state (set via `setTimeout` after entrance animation completes) to trigger the RAF scroll loop
+- Use an effect-local `setTimeout` after the entrance animation to trigger the
+  RAF scroll loop; do not add render state solely to mark the timer ready
 - Use `onWheel` + `onTouchStart` (not `onScroll`) on the container to set a `userScrolled` ref — `onScroll` fires on programmatic changes too and would kill the animation immediately

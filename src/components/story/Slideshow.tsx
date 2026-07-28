@@ -30,6 +30,7 @@ interface SlideshowProps {
 }
 
 interface SlideConfig {
+  label: string;
   Component: React.ComponentType<{
     stats: TextStatStats;
     palette: (typeof PALETTES)[number];
@@ -45,25 +46,25 @@ export function Slideshow({ stats }: SlideshowProps) {
   const s = stats.summary;
 
   const slidesConfig: SlideConfig[] = [
-    { Component: HeroSlide },
-    { Component: ActiveDaysSlide },
-    { Component: TopContactSlide, condition: (s) => !!s.topContacts[0] },
-    { Component: TopContactsListSlide, condition: (s) => s.topContacts.length > 1 },
-    { Component: YouTextedMoreSlide, condition: (s) => !!pickYouTextedMore(s) },
-    { Component: TheyTextedMoreSlide, condition: (s) => !!pickTheyTextedMore(s) },
-    { Component: LongestSentRunSlide, condition: (s) => !!s.summary.longestSentRun && s.summary.longestSentRun.count >= 3 },
-    { Component: SentVsReceivedSlide },
-    { Component: HourChartSlide },
-    { Component: DayOfWeekSlide },
-    { Component: MonthlyTimelineSlide },
-    { Component: CalendarHeatmapSlide, condition: (s) => s.calDays.length > 0 },
-    { Component: TopWordsSlide, condition: (s) => s.topWords.length > 0 },
-    { Component: TopEmojisSlide, condition: (s) => s.topEmojis.length > 0 },
-    { Component: ReactionsSlide, condition: () => s.reactionsSent + s.reactionsRecv > 0 },
-    { Component: GroupChatsSlide, condition: () => s.uniqueGroups > 0 },
-    { Component: StreakSlide, condition: () => s.longestStreak > 1 },
-    { Component: LongestMessageSlide, condition: () => (s.longestSentBody?.len ?? 0) > 100 || (s.longestRecvBody?.len ?? 0) > 100 },
-    { Component: WrapSlide },
+    { label: "Your message story", Component: HeroSlide },
+    { label: "Days together", Component: ActiveDaysSlide },
+    { label: "Your favorite person", Component: TopContactSlide, condition: (s) => !!s.topContacts[0] },
+    { label: "Inner circle", Component: TopContactsListSlide, condition: (s) => s.topContacts.length > 1 },
+    { label: "You texted more", Component: YouTextedMoreSlide, condition: (s) => !!pickYouTextedMore(s) },
+    { label: "They texted more", Component: TheyTextedMoreSlide, condition: (s) => !!pickTheyTextedMore(s) },
+    { label: "On a roll", Component: LongestSentRunSlide, condition: (s) => !!s.summary.longestSentRun && s.summary.longestSentRun.count >= 3 },
+    { label: "Sent and received", Component: SentVsReceivedSlide },
+    { label: "Your hours", Component: HourChartSlide },
+    { label: "Your week", Component: DayOfWeekSlide },
+    { label: "Over time", Component: MonthlyTimelineSlide },
+    { label: "Message calendar", Component: CalendarHeatmapSlide, condition: (s) => s.calDays.length > 0 },
+    { label: "Your words", Component: TopWordsSlide, condition: (s) => s.topWords.length > 0 },
+    { label: "Your emoji", Component: TopEmojisSlide, condition: (s) => s.topEmojis.length > 0 },
+    { label: "Reactions", Component: ReactionsSlide, condition: () => s.reactionsSent + s.reactionsRecv > 0 },
+    { label: "Group chats", Component: GroupChatsSlide, condition: () => s.uniqueGroups > 0 },
+    { label: "Your streak", Component: StreakSlide, condition: () => s.longestStreak > 1 },
+    { label: "The long one", Component: LongestMessageSlide, condition: () => (s.longestSentBody?.len ?? 0) > 100 || (s.longestRecvBody?.len ?? 0) > 100 },
+    { label: "Your textstat", Component: WrapSlide },
   ];
 
   const slides = slidesConfig.filter(
@@ -98,6 +99,21 @@ export function Slideshow({ stats }: SlideshowProps) {
   const handleRestart = useCallback(() => {
     window.location.reload();
   }, []);
+
+  const handleShare = useCallback(async () => {
+    const slide = slides[currentSlide];
+    const text = `${slide.label} — my textstat from ${stats.summary.totalMessages.toLocaleString()} messages.`;
+    const shareData = { title: "My textstat", text, url: window.location.origin };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+        return;
+      } catch (error) {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+      }
+    }
+    await navigator.clipboard.writeText(`${text} ${shareData.url}`);
+  }, [currentSlide, slides, stats.summary.totalMessages]);
 
   return (
     <div ref={containerRef} className="fixed inset-0 bg-black">
@@ -137,11 +153,11 @@ export function Slideshow({ stats }: SlideshowProps) {
       </div>
 
       <div className="absolute inset-0">
-        {slides.map(({ Component }, i) => {
+        {slides.map(({ Component, label }, i) => {
           const palette = PALETTES[i % PALETTES.length];
           return (
             <Component
-              key={i}
+              key={label}
               stats={stats}
               palette={palette}
               isCurrent={i === currentSlide}
@@ -156,6 +172,8 @@ export function Slideshow({ stats }: SlideshowProps) {
         onPrev={handlePrev}
         onNext={handleNext}
         onRestart={handleRestart}
+        onShare={handleShare}
+        shareLabel={`${currentSlide + 1} of ${slides.length} · ${slides[currentSlide].label}`}
       />
     </div>
   );

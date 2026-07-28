@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Upload, User, Sparkles } from "lucide-react";
+import { ArrowLeft, Upload, User, Sparkles } from "lucide-react";
 import { BackupInfo, Platform } from "@/types/stats";
 import { BackupBundle } from "@/lib/backup";
 import { DesktopOS } from "@/lib/os";
@@ -70,12 +70,14 @@ export function PlatformGuide({
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.5 }}
     >
-      <button
-        onClick={onBack}
-        className="mb-1 inline-flex items-center gap-[0.35rem] text-sm font-semibold text-white/65 transition-opacity hover:opacity-100"
+      <div id="import" className="h-20" />
+      <section className="glass-panel mx-auto max-w-[880px] p-5 sm:p-8 md:p-10">
+      {!isIphone && <button
+        onClick={() => { onBack(); }}
+        className="mb-5 inline-flex items-center gap-2 text-sm font-medium text-white/55 transition-colors hover:text-white"
       >
-        ← Choose a different phone
-      </button>
+        <ArrowLeft size={15} /> Back to iPhone
+      </button>}
 
       {isIphone ? (
         <IphoneGuide
@@ -138,9 +140,9 @@ export function PlatformGuide({
         whileTap={canStart ? { y: 0 } : undefined}
         onClick={onStart}
         disabled={!canStart}
-        className={`mt-4 w-full rounded-[18px] px-6 py-4 text-[1.1rem] font-extrabold tracking-[-0.01em] transition-all ${
+        className={`mt-6 w-full rounded-[18px] px-6 py-4 text-[1rem] font-semibold tracking-[-0.01em] transition-all ${
           canStart
-            ? "cursor-pointer bg-gradient-to-br from-[#ff2e63] via-[#6c25c4] to-[#00d6ff] text-white shadow-[0_12px_40px_-8px_rgba(255,46,99,.45),0_0_0_1px_rgba(255,255,255,.15)] hover:shadow-[0_16px_48px_-6px_rgba(255,46,99,.55),0_0_0_1px_rgba(255,255,255,.2)]"
+            ? "primary-button cursor-pointer"
             : "cursor-not-allowed bg-white/[0.06] text-white/35"
         }`}
       >
@@ -174,18 +176,19 @@ export function PlatformGuide({
 
       <div className="mt-6 flex gap-6 text-[0.9rem] text-white/70 max-md:flex-wrap">
         <span className="inline-flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-[#aef639] shadow-[0_0_14px_#aef639]" />
+          <span className="h-2 w-2 rounded-full bg-[#6ee7a8] shadow-[0_0_14px_#6ee7a8]" />
           100% client-side
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-[#aef639] shadow-[0_0_14px_#aef639]" />
+          <span className="h-2 w-2 rounded-full bg-[#6ee7a8] shadow-[0_0_14px_#6ee7a8]" />
           Streams 10GB+ files
         </span>
         <span className="inline-flex items-center gap-2">
-          <span className="h-2 w-2 rounded-full bg-[#aef639] shadow-[0_0_14px_#aef639]" />
+          <span className="h-2 w-2 rounded-full bg-[#6ee7a8] shadow-[0_0_14px_#6ee7a8]" />
           Nothing leaves your device
         </span>
       </div>
+      </section>
     </motion.div>
   );
 }

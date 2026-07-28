@@ -85,7 +85,6 @@ export function CalendarHeatmapSlide({
   isCurrent,
 }: CalendarHeatmapSlideProps) {
   const calDays = stats.calDays;
-  if (!calDays?.length) return null;
 
   const { months, maxCount, layout } = useMemo(() => {
     const months = buildMonthGrids(calDays);
@@ -93,6 +92,8 @@ export function CalendarHeatmapSlide({
     const layout = layoutParams(months.length);
     return { months, maxCount, layout };
   }, [calDays]);
+
+  if (!calDays.length) return null;
 
   const { cols, sq, gap } = layout;
 
