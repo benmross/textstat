@@ -60,3 +60,6 @@ imessage_sample/
 
 # legacy (moved Next.js was here)
 nextjs/
+
+# test fixtures
+/backup_fixture

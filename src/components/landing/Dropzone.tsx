@@ -13,39 +13,6 @@ interface DropzoneProps {
   iconBg?: string;
   iconShadow?: string;
   hasFile?: boolean;
-  // When set, folder drops are accepted. Receives all files found recursively;
-  // return the file to use, or null to ignore the drop.
-  folderPick?: (files: File[]) => File | null;
-  // Optional second file to extract from the same folder drop (e.g. contacts
-  // when the primary pick is the messages database).
-  folderPickExtra?: (files: File[]) => File | null;
-  onFileExtra?: (file: File) => void;
-}
-
-// Recursively collect every file from a dropped directory entry.
-function collectAllFiles(
-  entry: FileSystemDirectoryEntry,
-  results: File[],
-  done: () => void
-) {
-  const reader = entry.createReader();
-  function readBatch() {
-    reader.readEntries((entries) => {
-      if (!entries.length) { done(); return; }
-      let pending = entries.length;
-      const dec = () => { if (--pending === 0) readBatch(); };
-      for (const e of entries) {
-        if (e.isDirectory) {
-          collectAllFiles(e as FileSystemDirectoryEntry, results, dec);
-        } else if (e.isFile) {
-          (e as FileSystemFileEntry).file((f) => { results.push(f); dec(); }, dec);
-        } else {
-          dec();
-        }
-      }
-    });
-  }
-  readBatch();
 }
 
 export function Dropzone({
@@ -57,9 +24,6 @@ export function Dropzone({
   iconBg = "linear-gradient(135deg, #ff2e63, #ffd60a)",
   iconShadow = "rgba(255,46,99,.45)",
   hasFile = false,
-  folderPick,
-  folderPickExtra,
-  onFileExtra,
 }: DropzoneProps) {
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -76,27 +40,10 @@ export function Dropzone({
       e.preventDefault();
       e.currentTarget.classList.remove("!border-[#aef639]", "!bg-[#aef63914]");
 
-      if (folderPick) {
-        const item = e.dataTransfer.items?.[0];
-        const fsEntry = item?.webkitGetAsEntry?.();
-        if (fsEntry?.isDirectory) {
-          const files: File[] = [];
-          collectAllFiles(fsEntry as FileSystemDirectoryEntry, files, () => {
-            const picked = folderPick(files);
-            if (picked) onFileSelected(picked);
-            if (folderPickExtra && onFileExtra) {
-              const extra = folderPickExtra(files);
-              if (extra) onFileExtra(extra);
-            }
-          });
-          return;
-        }
-      }
-
       const files = Array.from(e.dataTransfer?.files || []);
       if (files.length) onFileSelected(files[0]);
     },
-    [onFileSelected, folderPick, folderPickExtra, onFileExtra]
+    [onFileSelected]
   );
 
   return (

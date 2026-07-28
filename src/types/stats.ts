@@ -110,3 +110,13 @@ export interface TextStatStats {
 
 export type Platform = "iphone" | "android";
 export type Screen = "landing" | "loading" | "story";
+
+// What the worker reads out of a backup's Manifest.plist before we commit to a
+// full parse — used to confirm the device and to know whether to ask for a
+// backup password.
+export interface BackupInfo {
+  encrypted: boolean;
+  deviceName: string;
+  productVersion: string;
+  date: number;
+}

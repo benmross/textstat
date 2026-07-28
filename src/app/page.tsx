@@ -3,7 +3,9 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Sparkles } from "lucide-react";
-import { Platform, TextStatStats, Screen } from "@/types/stats";
+import { BackupInfo, Platform, TextStatStats, Screen } from "@/types/stats";
+import { BackupBundle } from "@/lib/backup";
+import { useDesktopOS } from "@/lib/os";
 import { AnimatedBackground } from "@/components/shared/AnimatedBackground";
 import { PlatformPicker } from "@/components/landing/PlatformPicker";
 import { PlatformGuide } from "@/components/landing/PlatformGuide";
@@ -13,8 +15,14 @@ import { Slideshow } from "@/components/story/Slideshow";
 export default function Home() {
   const [screen, setScreen] = useState<Screen>("landing");
   const [platform, setPlatform] = useState<Platform | null>(null);
+  const os = useDesktopOS();
   const [dbFile, setDbFile] = useState<File | null>(null);
   const [contactsFile, setContactsFile] = useState<File | null>(null);
+  const [backup, setBackup] = useState<BackupBundle | null>(null);
+  const [backupInfo, setBackupInfo] = useState<BackupInfo | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [password, setPassword] = useState("");
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
   const [progressMsg, setProgressMsg] = useState("opening file…");
   const [stats, setStats] = useState<TextStatStats | null>(null);
@@ -29,7 +37,50 @@ export default function Home() {
     setPlatform(null);
     setDbFile(null);
     setContactsFile(null);
+    setBackup(null);
+    setBackupInfo(null);
+    setPassword("");
+    setPasswordError(null);
   }, []);
+
+  // Read Manifest.plist in a short-lived worker so we can name the device and
+  // ask for a password before committing to the full parse.
+  const handleBundle = useCallback((b: BackupBundle) => {
+    setBackup(b);
+    setBackupInfo(null);
+    setPassword("");
+    setPasswordError(null);
+    setDbFile(null);
+    setContactsFile(null);
+    setProbing(true);
+
+    const probe = new Worker("/worker.js");
+    probe.onmessage = (e) => {
+      if (e.data?.type === "probed") {
+        setBackupInfo(
+          e.data.info ?? { encrypted: false, deviceName: "", productVersion: "", date: 0 }
+        );
+        setProbing(false);
+        probe.terminate();
+      }
+    };
+    probe.onerror = () => {
+      setBackupInfo({ encrypted: false, deviceName: "", productVersion: "", date: 0 });
+      setProbing(false);
+      probe.terminate();
+    };
+    probe.postMessage({ type: "probe", backup: b });
+  }, []);
+
+  const handleSingleFile = useCallback(
+    (file: File, kind: "messages" | "contacts") => {
+      setBackup(null);
+      setBackupInfo(null);
+      if (kind === "contacts") setContactsFile(file);
+      else setDbFile(file);
+    },
+    []
+  );
 
   const classifyDB = useCallback(async (file: File): Promise<boolean> => {
     const name = file.name.toLowerCase();
@@ -80,7 +131,10 @@ export default function Home() {
   );
 
   const handleStart = useCallback(() => {
-    if (!dbFile) return;
+    if (!dbFile && !backup) return;
+    setPasswordError(null);
+    setProgress(0);
+    setProgressMsg("opening file…");
     setScreen("loading");
 
     const worker = new Worker("/worker.js");
@@ -91,25 +145,36 @@ export default function Home() {
       if (m.type === "progress") {
         const pct = Math.max(0, Math.min(100, m.pct || 0));
         setProgress(pct);
-        setProgressMsg(
-          m.msg || `parsing…`
-        );
+        setProgressMsg(m.msg || `parsing…`);
       } else if (m.type === "done") {
         setStats(m.stats);
         setScreen("story");
         worker.terminate();
       } else if (m.type === "error") {
-        setProgressMsg("something broke — " + m.error.split("\n")[0]);
+        // A bad backup password is a normal thing to get wrong — send people
+        // back to the form with the field flagged rather than a dead end.
+        if (m.code === "WRONG_PASSWORD") {
+          setPasswordError("That password didn't work. Try again?");
+          setScreen("landing");
+        } else if (m.code === "MANIFEST_DB_MISSING") {
+          setPasswordError(
+            "This backup is encrypted but incomplete. Make a fresh backup and try again."
+          );
+          setScreen("landing");
+        } else {
+          setProgressMsg("something broke — " + m.error.split("\n")[0]);
+        }
         console.error("[textstat worker]", m.error);
+        worker.terminate();
       }
     };
 
-    worker.postMessage({
-      type: "parse",
-      file: dbFile,
-      contactsFile: contactsFile || null,
-    });
-  }, [dbFile, contactsFile]);
+    worker.postMessage(
+      backup
+        ? { type: "parse", backup, password }
+        : { type: "parse", file: dbFile, contactsFile: contactsFile || null }
+    );
+  }, [dbFile, contactsFile, backup, password]);
 
   useEffect(() => {
     return () => {
@@ -141,11 +206,23 @@ export default function Home() {
               ) : (
                 <PlatformGuide
                   platform={platform}
+                  os={os}
                   onBack={handleBack}
                   dbFile={dbFile}
                   contactsFile={contactsFile}
+                  backup={backup}
+                  backupInfo={backupInfo}
+                  probing={probing}
+                  password={password}
+                  passwordError={passwordError}
                   onDbFile={handleDbFile}
                   onContactsFile={handleContactsFile}
+                  onBundle={handleBundle}
+                  onSingleFile={handleSingleFile}
+                  onPassword={(p) => {
+                    setPassword(p);
+                    setPasswordError(null);
+                  }}
                   onRemoveDb={() => setDbFile(null)}
                   onRemoveContacts={() => setContactsFile(null)}
                   onStart={handleStart}

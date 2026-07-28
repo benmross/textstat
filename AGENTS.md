@@ -39,6 +39,9 @@
 | `src/components/shared/Pill.tsx` | Pill/badge component |
 | `src/components/shared/AnimatedBackground.tsx` | Floating blob background (Framer Motion drift animation) |
 | `src/components/shared/GlowBorder.tsx` | Glassmorphism glow border wrapper utility |
+| `src/components/landing/BackupPicker.tsx` | iPhone backup folder intake — drag-drop, `showDirectoryPicker()`, `webkitdirectory` fallback, device confirmation, password prompt |
+| `src/lib/os.ts` | OS detection (`useDesktopOS()` via `useSyncExternalStore`, hydration-safe), `supportsDirectoryPicker()`, per-OS backup paths |
+| `src/lib/backup.ts` | Backup file hashes, folder scanning across all three intake routes, single-file classification |
 | `src/lib/utils.ts` | shadcn `cn()` utility (clsx + tailwind-merge) |
 | `src/lib/formatting.ts` | Date/number formatting, constants (DOW_NAMES, MONTH_NAMES, etc.) |
 | `src/lib/avatars.ts` | Avatar gradient palette, initials extraction, string hashing |
@@ -82,7 +85,7 @@
 
 | File | Role |
 |---|---|
-| `public/worker.js` | Web Worker — streaming XML parser, SQLite iMessage parser, vCard/AddressBook contacts parser, stats aggregation (~1257 lines) |
+| `public/worker.js` | Web Worker — streaming XML parser, SQLite iMessage parser, iOS backup decryption (bplist + keybag + AES), vCard/AddressBook contacts parsers, stats aggregation (~1560 lines) |
 | `public/vendor/sql-wasm.js` | Vendored sql.js (Emscripten-compiled SQLite → WASM) |
 | `public/vendor/sql-wasm.wasm` | WASM binary for sql.js (~645 KB) |
 
@@ -103,6 +106,9 @@
 | `vendor/sql-wasm.wasm` | WASM binary (also copied to `public/vendor/`) |
 | `test_parser.cjs` | Node.js smoke test for XML/SMS path |
 | `test_imessage.cjs` | Node.js smoke test for SQLite/iMessage path |
+| `test_backup_fixture.cjs` | Builds synthetic iOS backups on disk (also runnable directly: `npm run fixture -- <dir> [plain]`) |
+| `test_backup.cjs` | Round-trip test of the encrypted-backup path (no browser needed) |
+| `test_e2e.cjs` | Playwright test of the whole iPhone flow against the production build |
 | `package.json` | Combined manifest — Next.js deps + test scripts |
 
 ---
@@ -114,7 +120,9 @@
 ```
 Landing → PlatformPicker (iPhone/Android cards)
   ↓
-PlatformGuide (steps + dropzones)
+PlatformGuide
+  ├─ iPhone  → IphoneGuide (OS-detected) → BackupPicker → probe → password?
+  └─ Android → AndroidGuide + two dropzones
   ↓
 [Generate My Wrap] → LoadingScreen (progress + tips)
   ↓
@@ -123,19 +131,60 @@ Slideshow (14-16 slides with keyboard nav)
 [↺ start over] → Page reload
 ```
 
+The iPhone guide is **dropzone-first**: the picker sits at the top and the setup
+steps live in a panel below that is expanded by default and collapses itself the
+moment a backup is found (`showSteps = stepsOverride ?? !ready` — derived, not an
+effect, so nothing has to chase `ready`). Anyone who already backs up their phone
+never reads an instruction.
+
 Screen transitions use Framer Motion `AnimatePresence` with opacity fade.
 
 ### Upload → Parse Pipeline
 
-1. **Two separate dropzones** on the platform guide:
-   - **Message data** (required): accepts `.xml`, `.db` — click or drag-and-drop
-   - **Contacts** (required for iPhone, optional for Android): accepts `.vcf` — separate dropzone
-2. Files validated by extension + content-sniffing (magic bytes)
-3. Selected files shown as dismissible chips below dropzones
-4. "Generate My Wrap" button only enables when message file is selected
-5. On click, `new Worker('/worker.js')` spins up, switches to loading screen
-6. Worker parses everything, posts `progress` and `done`/`error` messages
-7. On `done`, renders Slideshow with stats, switches to story screen
+**iPhone — the local backup path (primary, works on macOS + Windows + Linux).**
+`sms.db` can only leave an iPhone inside a `mobilebackup2` backup; AFC exposes
+only the media sandbox, so there is no shortcut. The flow therefore minimises
+everything *around* the backup rather than trying to avoid it:
+
+1. `BackupPicker` takes one folder — the `MobileSync/Backup` root **or** a single
+   device folder. Three intake routes, all enumeration-free where possible:
+   - **Chromium**: `showDirectoryPicker()` → `getDirectoryHandle('3d')` →
+     `getFileHandle(hash)`. Direct lookup, so a 200k-file backup costs nothing.
+   - **Drag-and-drop (all browsers)**: `FileSystemDirectoryEntry.getFile()` takes
+     a *relative path*, so this is also a direct lookup.
+   - **Firefox / Safari fallback**: `<input webkitdirectory>` → `scanFileList()`
+     matches on `webkitRelativePath` (the browser bears the enumeration cost).
+2. If the picked folder holds several device folders, the one with the newest
+   `Manifest.plist` wins.
+3. A short-lived worker runs a `probe` message → `Manifest.plist` is read for
+   `IsEncrypted`, `Lockdown.DeviceName`, `ProductVersion` and `Date`. The UI
+   names the device back to the user and only then asks for a password.
+4. `parse` runs the real worker with `{ backup, password }`.
+5. On `WRONG_PASSWORD` the UI returns to the form with the field flagged rather
+   than dead-ending on the loading screen.
+
+**Android** keeps the original two-dropzone flow (`.xml` + optional `.vcf`).
+
+Anyone who drags a bare `chat.db` / `.xml` / `.vcf` onto the iPhone dropzone is
+routed by `classifyFile()` instead — the macOS Messages path still works, it is
+just no longer the documented one (it depends on Messages in iCloud having
+synced, and carries no contact names).
+
+### Backup file layout
+
+Files inside a backup are named `SHA-1("<domain>-<relative path>")` and live in a
+subfolder named after the hash's first two hex chars. **Filenames are identical in
+encrypted backups** — only contents are ciphertext — so lookup never needs
+`Manifest.db` unless decryption is required. Constants live in `src/lib/backup.ts`
+and are duplicated in `worker.js` (`BACKUP_HASH_*`):
+
+| File | Path in backup |
+|---|---|
+| `sms.db` | `3d/3d0d7e5fb2ce288813306e4d4636395e047a3d28` |
+| `AddressBook.sqlitedb` | `31/31bb7ba8914766d4ba40d6dfb6113c8b614be442` |
+| `AddressBookImages.sqlitedb` | `cd/cd6702cea29fe89cf280a76794405adb17f9a0ee` |
+
+iOS 9 and earlier stored files flat in the backup root; `hashPaths()` tries both.
 
 ### Worker (worker.js)
 
@@ -143,7 +192,36 @@ Format detection by sniffing first 16 bytes:
 - **SQLite path** (`parseSqlite()`): loads `public/vendor/sql-wasm.js` via `importScripts()`, runs JOIN queries across `message`/`handle`/`chat` tables
 - **XML path** (`parseFile()`): streaming line-by-line with 256KB line buffer cap, `indexOf`-based attribute extraction
 
-Contacts parsing: vCard (`parseVcard()`) or AddressBook `.abcddb` (`parseAddressBookDb()`). Photo extraction from vCard PHOTO field with vCard 3.0/4.0 support, emitting data URLs. For `.abcddb`, photos come from `ZTHUMBNAILIMAGEDATA` BLOB (Apple prepends a `0x01` version byte before raw JPEG/PNG data; `abcddPhotoUrl()` strips it) — this path is kept for backward compatibility. iPhone guide gives explicit paths for both files in a single unified numbered list. Step 1: open Finder, press ⌘⇧G. Step 2: paste `~/Library/Messages`, press Go, then drag `chat.db` into the dropzone rendered inline in this step. Steps 3–6: open Contacts app → select all (⌘A) → File → Export → Export vCard, save → drag the `.vcf` into the dropzone rendered inline. Both `Messages` and `Contacts` dropzones are embedded within their respective steps (not rendered separately below the guide). Both are marked required for iPhone; Generate button is disabled until both are present (`canStart = dbFile && contactsFile` for iPhone, `dbFile` only for Android). Button text updates contextually: "Add your contacts above to continue" when only messages are uploaded.
+**Contacts parsing** — `parseContactsFile(file, imagesFile)` sniffs the format:
+- **vCard** (`parseVcard()`): photos from the PHOTO field, vCard 3.0/4.0, emitted as data URLs
+- **iOS `AddressBook.sqlitedb`** (`iosAddressBookMap()`): the `ABPerson` / `ABMultiValue` schema from a backup. Values are classified by *content* (contains `@` → email, ≥5 digits → phone) rather than by `ABMultiValue.property`, whose ids have shifted across iOS versions. Photos come from `ABThumbnailImage` in `AddressBookImages.sqlitedb`.
+- **macOS `.abcddb`** (`abcddbMap()`): Core Data `ZABCDRECORD`; photos from `ZTHUMBNAILIMAGEDATA` (Apple prepends a `0x01` version byte before the raw JPEG/PNG; `abcddPhotoUrl()` strips it). Kept for backward compatibility.
+
+Dispatch is by `sqlite_master` table check (`ABPerson` present → iOS). Contacts are
+always optional — a failure to parse them is swallowed and the wrap falls back to
+phone numbers rather than blocking.
+
+### Encrypted backup decryption (worker.js)
+
+All WebCrypto, no extra WASM. `openBackup(bundle, password)`:
+
+1. `bplistParse()` — a minimal `bplist00` reader (dict/array/string/data/int/real/date/UID). Used for `Manifest.plist` and for the per-file blobs in `Manifest.db`.
+2. `unarchive()` — flattens an NSKeyedArchiver plist (`$objects` + UID refs) into plain data. Skips `$class` (cyclic) and maps `'$null'` → `null`.
+3. `parseKeybag()` — the keybag is a flat TLV stream (4-char ASCII tag, big-endian `uint32` length, value). Everything before the first `CLAS` is header metadata; each `CLAS` opens a protection-class block holding a wrapped key (`WPKY`).
+4. `backupKekFromPassword()` — iOS 10.2+ double-derives: `PBKDF2-SHA256(password, DPSL, DPIC)` then `PBKDF2-SHA1(…, SALT, ITER)`. Older backups use only the second step (detected by `DPSL`/`DPIC` being absent).
+5. `unwrapClassKeys()` — RFC 3394 via WebCrypto `AES-KW`. The `A6A6…` integrity check means a wrong password throws instead of yielding garbage; **zero successful unwraps is how a wrong password is detected**.
+6. `decryptBackupBlob()` — `Manifest.db` is decrypted with `ManifestKey`, then each file's wrapped key is read from its `Files.file` blob.
+
+**`aesCbcDecryptNoPad()` is the subtle part.** WebCrypto's AES-CBC always applies
+PKCS#7, but iOS payloads are raw block-aligned ciphertext with no padding.
+Appending one synthetic block — `AES-CBC-encrypt(padBlock, iv=lastCiphertextBlock)`,
+where `padBlock` is 16 bytes of `0x10` — gives WebCrypto exactly one block of valid
+padding to strip, leaving the true plaintext intact. Do not "simplify" this away.
+
+`unwrapFileKey()` tries the metadata `ProtectionClass`, then the 4-byte class
+prefix as little-**and** big-endian, then brute-forces every class key. The prefix
+endianness has been observed both ways across iOS versions, and unwrap is
+self-verifying so guessing is safe and cheap.
 
 **Group chat name resolution (iMessage)**: Before the main message loop, `parseSqlite()` runs a pre-query joining `chat_handle_join → handle → chat` to fetch all participants per group. Group names default to `display_name`; when that's empty (unnamed groups), a name is derived from the first 3 participant handles/names. `stats.groups` is pre-populated with participant counts and photos before messages are processed.
 
@@ -174,6 +252,10 @@ Contacts parsing: vCard (`parseVcard()`) or AddressBook `.abcddb` (`parseAddress
 - **shadcn/ui v4** — button, card, badge, progress primitives from base-ui/react
 - **Framer Motion** — screen transitions (`AnimatePresence`), blob animations, hover effects, slide transitions
 - **Guided wizard UX** — 2-phase flow (pick platform → guided upload)
+- **Backup-first for iPhone** — a local backup is the only way `sms.db` leaves the device, so the UI optimises around it instead of pretending otherwise. It also sidesteps the biggest silent failure of the old `chat.db` flow: partial history when Messages in iCloud was never enabled.
+- **OS auto-detected, never asked** — `useDesktopOS()` picks the Apple Devices app + `%USERPROFILE%` paths on Windows, Finder + `~/Library` on macOS. Windows gets a direct Microsoft Store link (product `9NP83LWLPZ9K`) rather than prose describing how to find it.
+- **Encrypted backups are decrypted in-browser, never refused** — telling people to disable encryption would force a *fresh full backup* and silently drop their Health data. Supporting the password is what makes an already-existing backup usable.
+- **Contacts are never blocking** — parse failures degrade to phone numbers.
 - **No emoji characters in UI** — all decorative icons use `lucide-react` components; proprietary brand logos (Apple, Android) use `react-icons/fa`
 - **Apple emoji on iMessage exports** — `AppleEmoji` component loads 64×64 PNGs from `emoji-datasource-apple` via jsDelivr CDN; falls back to text with system emoji font; only activated when `stats.summary.serviceCounts` is set (iMessage)
 - **Contrast-safe palette colors** — `contrastColor(hex)` in `palettes.ts` computes luminance and returns `#000000cc` or `#ffffffee`; used wherever `palette.fg` is a background color to avoid invisible text (several palettes have identical `fg` and `accent`)
@@ -204,12 +286,35 @@ npm run build     # Verify TypeScript + production build
 npm run lint      # ESLint
 ```
 
-### Running Tests (legacy)
+### Running Tests
 
 ```bash
+npm test              # encrypted-backup round trip (fast, no browser)
+npm run test:e2e      # builds, then drives real Chromium through the iPhone flow
+npm run fixture -- /tmp/Backup/UDID          # write an encrypted backup to disk
+npm run fixture -- /tmp/Backup/UDID plain    # ...an unencrypted one
+
+# legacy smoke tests, need your own export files
 node test_parser.cjs [path/to/sms-export.xml]
 node test_imessage.cjs [path/to/chat.db]
 ```
+
+`test_backup.cjs` and `test_backup_fixture.cjs` deliberately build their plists
+with **Python's `plistlib`** and wrap keys with **Node's OpenSSL bindings**, so the
+worker's readers are never validated against their own writers. `python3` is
+required for these two (stdlib only).
+
+`test_e2e.cjs` needs `npx playwright install chromium` once. It stubs
+`navigator.userAgentData.platform` to assert the Windows and macOS guide variants,
+then runs a full encrypted import through to the slideshow.
+
+**No real backup is needed for any of this** — the fixtures are synthesised.
+
+### Baseline lint state
+
+`npm run lint` reports 3 pre-existing errors (`CalendarHeatmapSlide`,
+`LongestSentRunSlide`, `ReactionsSlide`) and 1 warning (`AppleEmoji`). These predate
+the backup work. Don't treat them as regressions; don't let the count grow either.
 
 ### Code Conventions
 
@@ -221,12 +326,12 @@ node test_imessage.cjs [path/to/chat.db]
 
 ### Before Committing
 
-1. Run `npm run build` to check TypeScript + build
-2. Run `npm run lint` to check ESLint
-3. Verify all three screens work (landing → loading → story)
-4. Verify both iPhone and Android wizard paths
-5. Verify dropzones accept correct file types
-6. If `worker.js` or `vendor/` change, sync `vendor/` → `public/vendor/` and `worker.js` → `public/worker.js`
+1. **If `worker.js` or `vendor/` changed, sync first** — `cp worker.js public/worker.js`, `cp vendor/* public/vendor/`. The app only ever loads the `public/` copies, so an unsynced edit silently does nothing.
+2. Run `npm run build` to check TypeScript + build
+3. Run `npm run lint` — expect the 3-error baseline above, no more
+4. Run `npm test` (encrypted-backup round trip)
+5. Run `npm run test:e2e` if you touched the landing flow, the worker, or `src/lib/backup.ts`
+6. Verify all three screens work (landing → loading → story) and both wizard paths
 
 ### Slide Entrance Animations
 

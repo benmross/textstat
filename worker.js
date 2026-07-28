@@ -347,34 +347,82 @@ function finishMms(mms, stats) {
 
 self.onmessage = async (e) => {
   const msg = e.data;
-  if (msg && msg.type === 'parse') {
+  if (!msg) return;
+
+  // Cheap round-trip so the UI can name the device and ask for a backup
+  // password before committing to a full parse.
+  if (msg.type === 'probe') {
     try {
+      self.postMessage({ type: 'probed', info: await probeBackup(msg.backup) });
+    } catch (err) {
+      self.postMessage({ type: 'probed', info: null, error: String((err && err.message) || err) });
+    }
+    return;
+  }
+
+  if (msg.type === 'parse') {
+    try {
+      let file = msg.file;
+      let contactsFile = msg.contactsFile || null;
+      let imagesFile = null;
+
+      if (msg.backup) {
+        const opened = await openBackup(msg.backup, msg.password);
+        file = opened.sms;
+        contactsFile = opened.addressBook;
+        imagesFile = opened.addressBookImages;
+      }
+
       // Parse optional contacts file first so the name map is ready.
       let nameMap = null;
-      if (msg.contactsFile) {
-        self.postMessage({ type: 'progress', pct: 0, bytes: 0, total: msg.file.size, count: 0, msg: 'reading contacts…' });
-        nameMap = await parseContactsFile(msg.contactsFile);
-        self.postMessage({ type: 'progress', pct: 2, bytes: 0, total: msg.file.size, count: 0, msg: `loaded ${nameMap.size} contact entries` });
+      if (contactsFile) {
+        self.postMessage({ type: 'progress', pct: 14, bytes: 0, total: file.size, count: 0, msg: 'reading contacts…' });
+        try {
+          nameMap = await parseContactsFile(contactsFile, imagesFile);
+          self.postMessage({ type: 'progress', pct: 16, bytes: 0, total: file.size, count: 0, msg: `loaded ${nameMap.size} contact entries` });
+        } catch (_) {
+          // Contacts are a nice-to-have — never block a wrap on them.
+          nameMap = null;
+        }
       }
-      const head = await msg.file.slice(0, 16).arrayBuffer();
-      const headBytes = new Uint8Array(head);
+      const headBytes = new Uint8Array(await file.slice(0, 16).arrayBuffer());
       if (isSqliteMagic(headBytes)) {
-        await parseSqlite(msg.file, nameMap);
+        await parseSqlite(file, nameMap);
       } else {
-        await parseFile(msg.file, nameMap); // SMS&R XML has contact_name; photos come from vCard
+        await parseFile(file, nameMap); // SMS&R XML has contact_name; photos come from vCard
       }
     } catch (err) {
-      self.postMessage({ type: 'error', error: (err && err.stack) || String(err) });
+      const code = (err && err.message) || '';
+      if (code === 'WRONG_PASSWORD' || code === 'MANIFEST_DB_MISSING') {
+        self.postMessage({ type: 'error', code, error: code });
+      } else {
+        self.postMessage({ type: 'error', error: (err && err.stack) || String(err) });
+      }
     }
   }
 };
 
 // ---------- contacts (vCard + AddressBook .abcddb) ----------
 
-async function parseContactsFile(file) {
+// `imagesFile` is only used by the iOS backup path (AddressBookImages.sqlitedb).
+async function parseContactsFile(file, imagesFile) {
   const head = new Uint8Array(await file.slice(0, 16).arrayBuffer());
   if (isSqliteMagic(head)) {
-    return parseAddressBookDb(file);
+    const SQL = await getSqlJs();
+    const db = new SQL.Database(new Uint8Array(await file.arrayBuffer()));
+    const tables = new Set();
+    try {
+      const st = db.prepare("SELECT name FROM sqlite_master WHERE type='table'");
+      while (st.step()) tables.add(st.getAsObject().name);
+      st.free();
+    } catch (_) { /* unreadable schema — fall through to the macOS queries */ }
+    // iOS backups use the old ABPerson/ABMultiValue schema; macOS Contacts
+    // uses Core Data's ZABCDRECORD.
+    const map = tables.has('ABPerson')
+      ? await iosAddressBookMap(db, imagesFile, SQL)
+      : abcddbMap(db);
+    db.close();
+    return map;
   }
   const text = await file.text();
   return parseVcard(text);
@@ -506,12 +554,58 @@ function abcddPhotoUrl(blob) {
   return 'data:image/' + (isJpeg ? 'jpeg' : 'png') + ';base64,' + uint8ToBase64(blob.subarray(start));
 }
 
-async function parseAddressBookDb(file) {
-  if (typeof self.initSqlJs !== 'function') {
-    importScripts('vendor/sql-wasm.js');
+// iOS AddressBook.sqlitedb (from a backup). ABMultiValue holds phones, emails,
+// URLs and more in one table, so classify by the value itself rather than
+// trusting the `property` id, which has shifted across iOS versions.
+async function iosAddressBookMap(db, imagesFile, SQL) {
+  const map = new Map();
+
+  const photos = new Map();
+  if (imagesFile) {
+    try {
+      const idb = new SQL.Database(new Uint8Array(await imagesFile.arrayBuffer()));
+      const st = idb.prepare('SELECT record_id, data FROM ABThumbnailImage');
+      while (st.step()) {
+        const r = st.getAsObject();
+        if (r.data && !photos.has(r.record_id)) {
+          const url = abcddPhotoUrl(r.data);
+          if (url) photos.set(r.record_id, url);
+        }
+      }
+      st.free();
+      idb.close();
+    } catch (_) { /* images db is optional */ }
   }
-  const SQL = await self.initSqlJs({ locateFile: f => 'vendor/' + f });
-  const db = new SQL.Database(new Uint8Array(await file.arrayBuffer()));
+
+  try {
+    const st = db.prepare(`
+      SELECT p.ROWID AS rid,
+             TRIM(COALESCE(p.First,'') || ' ' || COALESCE(p.Last,'')) AS name,
+             p.Organization AS org,
+             mv.value AS value
+      FROM ABPerson p
+      JOIN ABMultiValue mv ON mv.record_id = p.ROWID
+      WHERE mv.value IS NOT NULL AND mv.value != ''
+    `);
+    while (st.step()) {
+      const r = st.getAsObject();
+      const name = (r.name && r.name.trim()) || r.org || '';
+      const photo = photos.get(r.rid) || null;
+      if (!name && !photo) continue;
+      const value = String(r.value);
+      const entry = { name, photo };
+      if (value.indexOf('@') > 0) {
+        nameMapAdd(map, 'e:' + value.toLowerCase().trim(), entry);
+      } else if (value.replace(/[^\d]/g, '').length >= 5) {
+        nameMapAdd(map, 'p:' + normalizePhone(value), entry);
+      }
+    }
+    st.free();
+  } catch (_) { /* schema mismatch — return whatever we got */ }
+  return map;
+}
+
+function abcddbMap(db) {
   const map = new Map();
   // Some Macs store contacts only in the per-source .abcddb under
   // ~/Library/Application Support/AddressBook/Sources/<UUID>/. The schema is
@@ -555,7 +649,6 @@ async function parseAddressBookDb(file) {
     }
     stmt.free();
   } catch (e) { /* table may not exist */ }
-  db.close();
   return map;
 }
 
@@ -575,6 +668,379 @@ function lookupContactPhoto(handle, nameMap) {
   const e = lookupContact(handle, nameMap);
   return e && e.photo ? e.photo : null;
 }
+
+// ---------- iOS backup: binary plist ----------
+
+function latin1(buf, pos, len) {
+  let s = '';
+  for (let i = 0; i < len; i += 4096) {
+    const end = Math.min(i + 4096, len);
+    s += String.fromCharCode.apply(null, buf.subarray(pos + i, pos + end));
+  }
+  return s;
+}
+
+function beInt(bytes) {
+  let v = 0;
+  for (let i = 0; i < bytes.length; i++) v = v * 256 + bytes[i];
+  return v;
+}
+
+// Minimal bplist00 reader — enough for Manifest.plist and the NSKeyedArchiver
+// blobs stored in Manifest.db's Files table.
+function bplistParse(buf) {
+  if (!buf || buf.length < 40) throw new Error('plist too small');
+  if (latin1(buf, 0, 6) !== 'bplist') throw new Error('not a binary plist');
+  const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+  const t = buf.length - 32;
+  const offsetSize = buf[t + 6];
+  const refSize = buf[t + 7];
+  const numObjects = Number(dv.getBigUint64(t + 8));
+  const topObject = Number(dv.getBigUint64(t + 16));
+  const offsetTableOffset = Number(dv.getBigUint64(t + 24));
+
+  const sized = (p, n) => {
+    let v = 0;
+    for (let i = 0; i < n; i++) v = v * 256 + buf[p + i];
+    return v;
+  };
+  const offsets = new Array(numObjects);
+  for (let i = 0; i < numObjects; i++) {
+    offsets[i] = sized(offsetTableOffset + i * offsetSize, offsetSize);
+  }
+
+  const cache = new Array(numObjects);
+  function readObject(idx) {
+    if (idx < 0 || idx >= numObjects) return null;
+    if (idx in cache) return cache[idx];
+    let pos = offsets[idx];
+    const marker = buf[pos++];
+    const type = marker >> 4;
+    const nib = marker & 0x0f;
+    // For sized types a low nibble of 0xF means the real count follows as an int.
+    const count = () => {
+      if (nib !== 0x0f) return nib;
+      const m = buf[pos++];
+      const n = 1 << (m & 0x0f);
+      const v = sized(pos, n);
+      pos += n;
+      return v;
+    };
+    let out;
+    switch (type) {
+      case 0x0:
+        out = nib === 8 ? false : nib === 9 ? true : null;
+        break;
+      case 0x1: {
+        const n = 1 << nib;
+        // 8-byte ints are signed; 16-byte ones only ever hold small values here.
+        out = n === 8 ? Number(dv.getBigInt64(pos))
+            : n === 16 ? Number(dv.getBigUint64(pos + 8))
+            : sized(pos, n);
+        break;
+      }
+      case 0x2:
+        out = (1 << nib) === 4 ? dv.getFloat32(pos) : dv.getFloat64(pos);
+        break;
+      case 0x3:
+        out = new Date(dv.getFloat64(pos) * 1000 + APPLE_EPOCH_OFFSET_MS);
+        break;
+      case 0x4: {
+        const n = count();
+        out = buf.subarray(pos, pos + n);
+        break;
+      }
+      case 0x5: {
+        const n = count();
+        out = latin1(buf, pos, n);
+        break;
+      }
+      case 0x6: {
+        const n = count();
+        let s = '';
+        for (let i = 0; i < n; i++) s += String.fromCharCode(dv.getUint16(pos + i * 2));
+        out = s;
+        break;
+      }
+      case 0x8:
+        out = { __uid: sized(pos, nib + 1) };
+        break;
+      case 0xa:
+      case 0xc: {
+        const n = count();
+        const refs = [];
+        for (let i = 0; i < n; i++) refs.push(sized(pos + i * refSize, refSize));
+        cache[idx] = out = [];
+        for (const r of refs) out.push(readObject(r));
+        return out;
+      }
+      case 0xd: {
+        const n = count();
+        const kr = [], vr = [];
+        for (let i = 0; i < n; i++) kr.push(sized(pos + i * refSize, refSize));
+        for (let i = 0; i < n; i++) vr.push(sized(pos + (n + i) * refSize, refSize));
+        cache[idx] = out = {};
+        for (let i = 0; i < n; i++) out[String(readObject(kr[i]))] = readObject(vr[i]);
+        return out;
+      }
+      default:
+        out = null;
+    }
+    cache[idx] = out;
+    return out;
+  }
+  return readObject(topObject);
+}
+
+// Flatten an NSKeyedArchiver plist ($objects + UID references) into plain data.
+function unarchive(plist) {
+  const objects = plist && plist.$objects;
+  if (!Array.isArray(objects)) return plist;
+  const top = plist.$top && plist.$top.root;
+  function resolve(v, depth) {
+    if (depth > 24 || v === null || v === undefined) return null;
+    if (typeof v === 'object' && typeof v.__uid === 'number') {
+      return resolve(objects[v.__uid], depth + 1);
+    }
+    if (ArrayBuffer.isView(v)) return v;
+    if (typeof v.getTime === 'function') return v;
+    if (Array.isArray(v)) return v.map(x => resolve(x, depth + 1));
+    if (typeof v === 'object') {
+      const out = {};
+      for (const k of Object.keys(v)) {
+        if (k === '$class') continue; // cyclic, and we never need it
+        out[k] = resolve(v[k], depth + 1);
+      }
+      return out;
+    }
+    return v === '$null' ? null : v;
+  }
+  return resolve(top === undefined ? plist : top, 0);
+}
+
+// ---------- iOS backup: keybag + decryption ----------
+
+const ZERO_IV = new Uint8Array(16);
+
+// The backup keybag is a flat TLV stream: 4-char ASCII tag, big-endian uint32
+// length, value. Everything before the first CLAS tag is header metadata; each
+// CLAS starts a per-protection-class block holding a wrapped key (WPKY).
+function parseKeybag(bytes) {
+  const attrs = {};
+  const classes = {};
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  let cur = null;
+  let p = 0;
+  while (p + 8 <= bytes.length) {
+    const tag = latin1(bytes, p, 4);
+    const len = dv.getUint32(p + 4);
+    p += 8;
+    if (p + len > bytes.length) break;
+    const val = bytes.subarray(p, p + len);
+    p += len;
+    if (tag === 'CLAS') {
+      cur = { CLAS: beInt(val) };
+      classes[cur.CLAS] = cur;
+    } else if (cur && (tag === 'WRAP' || tag === 'KTYP')) {
+      cur[tag] = beInt(val);
+    } else if (cur && (tag === 'WPKY' || tag === 'UUID' || tag === 'PBKY')) {
+      cur[tag] = val;
+    } else {
+      attrs[tag] = val;
+    }
+  }
+  return { attrs, classes };
+}
+
+async function pbkdf2(pw, salt, iterations, hash, lenBytes) {
+  const key = await crypto.subtle.importKey('raw', pw, 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', salt, iterations, hash }, key, lenBytes * 8
+  );
+  return new Uint8Array(bits);
+}
+
+// iOS 10.2+ backups double-derive: PBKDF2-SHA256 over DPSL/DPIC, then the
+// legacy PBKDF2-SHA1 over SALT/ITER. Older backups use only the second step.
+async function backupKekFromPassword(password, kb) {
+  let seed = new TextEncoder().encode(password);
+  if (kb.attrs.DPSL && kb.attrs.DPIC) {
+    seed = await pbkdf2(seed, kb.attrs.DPSL, beInt(kb.attrs.DPIC), 'SHA-256', 32);
+  }
+  if (!kb.attrs.SALT || !kb.attrs.ITER) throw new Error('keybag missing SALT/ITER');
+  return pbkdf2(seed, kb.attrs.SALT, beInt(kb.attrs.ITER), 'SHA-1', 32);
+}
+
+// RFC 3394 key unwrap. The A6A6… integrity check means a wrong KEK throws
+// rather than returning garbage, which is what lets us detect a bad password.
+async function aesUnwrap(kekBytes, wrapped) {
+  const kek = await crypto.subtle.importKey('raw', kekBytes, { name: 'AES-KW' }, false, ['unwrapKey']);
+  const key = await crypto.subtle.unwrapKey(
+    'raw', wrapped, kek, { name: 'AES-KW' }, { name: 'AES-CBC' }, true, ['encrypt', 'decrypt']
+  );
+  return new Uint8Array(await crypto.subtle.exportKey('raw', key));
+}
+
+async function unwrapClassKeys(kek, kb) {
+  const out = {};
+  for (const k of Object.keys(kb.classes)) {
+    const c = kb.classes[k];
+    if (!c.WPKY || (c.WRAP & 2) === 0) continue;
+    try {
+      out[c.CLAS] = await aesUnwrap(kek, c.WPKY);
+    } catch (_) { /* wrong password, or a class we can't unwrap */ }
+  }
+  return out;
+}
+
+// WebCrypto's AES-CBC always applies PKCS#7, but iOS backup payloads are raw
+// block-aligned ciphertext with no padding. Appending one synthetic block that
+// decrypts to exactly 16 bytes of 0x10 gives WebCrypto valid padding to strip,
+// leaving the true plaintext intact.
+async function aesCbcDecryptNoPad(keyBytes, data) {
+  if (!data.length) return data;
+  if (data.length % 16) data = data.subarray(0, data.length - (data.length % 16));
+  if (!data.length) return data;
+  const key = await crypto.subtle.importKey('raw', keyBytes, { name: 'AES-CBC' }, false, ['encrypt', 'decrypt']);
+  const last = data.subarray(data.length - 16);
+  const padBlock = new Uint8Array(16).fill(16);
+  const enc = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-CBC', iv: last }, key, padBlock));
+  const combined = new Uint8Array(data.length + 16);
+  combined.set(data, 0);
+  combined.set(enc.subarray(0, 16), data.length);
+  const out = await crypto.subtle.decrypt({ name: 'AES-CBC', iv: ZERO_IV }, key, combined);
+  return new Uint8Array(out);
+}
+
+// `blob` here is the 4-byte protection class followed by the 40-byte wrapped
+// file key. The class prefix has been seen both little- and big-endian across
+// iOS versions, so fall back to trying every class key — unwrap is
+// self-verifying, so a wrong key just throws.
+async function unwrapFileKey(wrappedBlob, classKeys, preferredClass) {
+  const wrapped = wrappedBlob.subarray(4);
+  const order = [];
+  if (preferredClass != null) order.push(preferredClass);
+  order.push(wrappedBlob[0] | (wrappedBlob[1] << 8) | (wrappedBlob[2] << 16));
+  order.push(beInt(wrappedBlob.subarray(0, 4)));
+  for (const k of Object.keys(classKeys)) order.push(Number(k));
+  const tried = new Set();
+  for (const c of order) {
+    if (tried.has(c) || !classKeys[c]) continue;
+    tried.add(c);
+    try {
+      return await aesUnwrap(classKeys[c], wrapped);
+    } catch (_) { /* try the next candidate */ }
+  }
+  throw new Error('could not unwrap file key');
+}
+
+async function decryptBackupBlob(blob, wrappedBlob, classKeys, protectionClass, realSize) {
+  const fileKey = await unwrapFileKey(wrappedBlob, classKeys, protectionClass);
+  const data = new Uint8Array(await blob.arrayBuffer());
+  const plain = await aesCbcDecryptNoPad(fileKey, data);
+  return realSize && realSize > 0 && realSize <= plain.length
+    ? plain.subarray(0, realSize)
+    : plain;
+}
+
+async function getSqlJs() {
+  if (typeof self.initSqlJs !== 'function') {
+    importScripts('vendor/sql-wasm.js');
+  }
+  return self.initSqlJs({ locateFile: f => 'vendor/' + f });
+}
+
+// Read Manifest.plist: is this backup encrypted, and which device is it?
+async function probeBackup(bundle) {
+  const info = { encrypted: false, deviceName: '', productVersion: '', date: 0 };
+  if (!bundle.manifestPlist) {
+    info.date = bundle.sms ? bundle.sms.lastModified || 0 : 0;
+    return info;
+  }
+  const plist = bplistParse(new Uint8Array(await bundle.manifestPlist.arrayBuffer()));
+  info.encrypted = !!plist.IsEncrypted;
+  const lock = plist.Lockdown || {};
+  info.deviceName = lock.DeviceName || plist['Device Name'] || '';
+  info.productVersion = lock.ProductVersion || '';
+  info.date = plist.Date && typeof plist.Date.getTime === 'function'
+    ? plist.Date.getTime()
+    : (bundle.manifestPlist.lastModified || 0);
+  return info;
+}
+
+// Turn a backup bundle into plain Blobs the existing SQLite parsers can read.
+// Unencrypted backups are a pass-through; encrypted ones go through the keybag.
+async function openBackup(bundle, password) {
+  const info = await probeBackup(bundle);
+  if (!info.encrypted) {
+    return {
+      info,
+      sms: bundle.sms,
+      addressBook: bundle.addressBook,
+      addressBookImages: bundle.addressBookImages,
+    };
+  }
+  if (!bundle.manifestDb) throw new Error('MANIFEST_DB_MISSING');
+
+  self.postMessage({ type: 'progress', pct: 4, msg: 'unlocking backup…' });
+  const plist = bplistParse(new Uint8Array(await bundle.manifestPlist.arrayBuffer()));
+  if (!plist.BackupKeyBag) throw new Error('MANIFEST_DB_MISSING');
+  const kb = parseKeybag(plist.BackupKeyBag);
+  const kek = await backupKekFromPassword(password || '', kb);
+  const classKeys = await unwrapClassKeys(kek, kb);
+  if (!Object.keys(classKeys).length) throw new Error('WRONG_PASSWORD');
+
+  self.postMessage({ type: 'progress', pct: 8, msg: 'reading backup index…' });
+  let manifestBytes;
+  try {
+    manifestBytes = await decryptBackupBlob(bundle.manifestDb, plist.ManifestKey, classKeys, null, 0);
+  } catch (_) {
+    throw new Error('WRONG_PASSWORD');
+  }
+  if (!isSqliteMagic(manifestBytes)) throw new Error('WRONG_PASSWORD');
+
+  const SQL = await getSqlJs();
+  const mdb = new SQL.Database(manifestBytes);
+  const metaFor = (hash) => {
+    try {
+      const stmt = mdb.prepare('SELECT file FROM Files WHERE fileID = ?');
+      stmt.bind([hash]);
+      let meta = null;
+      if (stmt.step()) meta = unarchive(bplistParse(stmt.getAsObject().file));
+      stmt.free();
+      return meta;
+    } catch (_) {
+      return null;
+    }
+  };
+
+  const decryptOne = async (blob, hash) => {
+    if (!blob) return null;
+    const meta = metaFor(hash);
+    const keyBlob = meta && meta.EncryptionKey && meta.EncryptionKey['NS.data'];
+    if (!keyBlob) return null;
+    try {
+      return new Blob([
+        await decryptBackupBlob(blob, keyBlob, classKeys, meta.ProtectionClass, meta.Size),
+      ]);
+    } catch (_) {
+      return null;
+    }
+  };
+
+  self.postMessage({ type: 'progress', pct: 12, msg: 'decrypting messages…' });
+  const sms = await decryptOne(bundle.sms, BACKUP_HASH_SMS);
+  const addressBook = await decryptOne(bundle.addressBook, BACKUP_HASH_ADDRESSBOOK);
+  const addressBookImages = await decryptOne(bundle.addressBookImages, BACKUP_HASH_ADDRESSBOOK_IMAGES);
+  mdb.close();
+
+  if (!sms) throw new Error('WRONG_PASSWORD');
+  return { info, sms, addressBook, addressBookImages };
+}
+
+const BACKUP_HASH_SMS = '3d0d7e5fb2ce288813306e4d4636395e047a3d28';
+const BACKUP_HASH_ADDRESSBOOK = '31bb7ba8914766d4ba40d6dfb6113c8b614be442';
+const BACKUP_HASH_ADDRESSBOOK_IMAGES = 'cd6702cea29fe89cf280a76794405adb17f9a0ee';
 
 // ---------- file format detection ----------
 
@@ -668,12 +1134,7 @@ async function parseSqlite(file, nameMap) {
 
   // load sql.js (vendored); workers don't have window/document, so we configure
   // Module shim before importScripts so the auto-init doesn't bind to globals.
-  if (typeof self.initSqlJs !== 'function') {
-    importScripts('vendor/sql-wasm.js');
-  }
-  const SQL = await self.initSqlJs({
-    locateFile: f => 'vendor/' + f,
-  });
+  const SQL = await getSqlJs();
 
   self.postMessage({ type: 'progress', pct: 20, bytes: totalSize / 4, total: totalSize, count: 0, msg: 'reading database…' });
 
