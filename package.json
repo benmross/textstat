@@ -8,12 +8,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node test_backup.cjs",
-    "test:parser": "node test_parser.cjs",
-    "test:imessage": "node test_imessage.cjs",
-    "test:backup": "node test_backup.cjs",
-    "test:e2e": "npm run build && node test_e2e.cjs",
-    "fixture": "node test_backup_fixture.cjs"
+    "test": "node test/test_backup.cjs",
+    "test:parser": "node test/test_parser.cjs",
+    "test:imessage": "node test/test_imessage.cjs",
+    "test:backup": "node test/test_backup.cjs",
+    "test:e2e": "npm run build && node test/test_e2e.cjs",
+    "fixture": "node test/test_backup_fixture.cjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

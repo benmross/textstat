@@ -6,7 +6,7 @@
 
 **textstat** is a 100% client-side browser app that produces a cinematic, Apple-inspired slideshow from your SMS/iMessage history. Users import an iPhone backup, a synced macOS `chat.db`, or an Android [SMS Backup & Restore](https://www.smsbackupandrestore.com/) XML export, and the app parses everything locally — no data leaves the device.
 
-- **Repo:** [`https://github.com/benmross/textstat`](https://github.com/benmross/textstat) (private)
+- **Repo:** [`https://github.com/benmross/textstat`](https://github.com/benmross/textstat)
 - **Frontend:** Next.js 16 (App Router) with TypeScript, Tailwind CSS v4, shadcn/ui v4, Framer Motion, lucide-react (icons), and react-icons (brand logos)
 - **Legacy frontend:** `legacy/` directory (vanilla JS, kept for reference)
 - **Runtime:** Browser only. `public/vendor/sql-wasm.js` + `public/vendor/sql-wasm.wasm` provide SQLite via WebAssembly (sql.js compiled to WASM).
@@ -106,11 +106,11 @@
 | `worker.js` | Worker source (also copied to `public/worker.js` for the Next.js app) |
 | `vendor/sql-wasm.js` | Vendored sql.js (also copied to `public/vendor/`) |
 | `vendor/sql-wasm.wasm` | WASM binary (also copied to `public/vendor/`) |
-| `test_parser.cjs` | Node.js smoke test for XML/SMS path |
-| `test_imessage.cjs` | Node.js smoke test for SQLite/iMessage path |
-| `test_backup_fixture.cjs` | Builds synthetic iOS backups on disk (also runnable directly: `npm run fixture -- <dir> [plain]`) |
-| `test_backup.cjs` | Round-trip test of the encrypted-backup path (no browser needed) |
-| `test_e2e.cjs` | Playwright test of the whole iPhone flow against the production build |
+| `test/test_parser.cjs` | Node.js smoke test for XML/SMS path |
+| `test/test_imessage.cjs` | Node.js smoke test for SQLite/iMessage path |
+| `test/test_backup_fixture.cjs` | Builds synthetic iOS backups on disk (also runnable directly: `npm run fixture -- <dir> [plain]`) |
+| `test/test_backup.cjs` | Round-trip test of the encrypted-backup path (no browser needed) |
+| `test/test_e2e.cjs` | Playwright test of the whole iPhone flow against the production build |
 | `package.json` | Combined manifest — Next.js deps + test scripts |
 
 ---
@@ -316,16 +316,16 @@ npm run fixture -- /tmp/Backup/UDID          # write an encrypted backup to disk
 npm run fixture -- /tmp/Backup/UDID plain    # ...an unencrypted one
 
 # legacy smoke tests, need your own export files
-node test_parser.cjs [path/to/sms-export.xml]
-node test_imessage.cjs [path/to/chat.db]
+node test/test_parser.cjs [path/to/sms-export.xml]
+node test/test_imessage.cjs [path/to/chat.db]
 ```
 
-`test_backup.cjs` and `test_backup_fixture.cjs` deliberately build their plists
+`test/test_backup.cjs` and `test/test_backup_fixture.cjs` deliberately build their plists
 with **Python's `plistlib`** and wrap keys with **Node's OpenSSL bindings**, so the
 worker's readers are never validated against their own writers. `python3` is
 required for these two (stdlib only).
 
-`test_e2e.cjs` needs `npx playwright install chromium` once. It stubs
+`test/test_e2e.cjs` needs `npx playwright install chromium` once. It stubs
 `navigator.userAgentData.platform` to assert the Windows and macOS guide variants,
 then runs a full encrypted import through to the slideshow. The test follows the
 situation-first choices (Messages in iCloud / existing backup / new backup),

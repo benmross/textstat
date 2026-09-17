@@ -8,7 +8,7 @@ const vm = require('node:vm');
 const { Readable } = require('node:stream');
 const { ReadableStream, TextDecoderStream } = require('node:stream/web');
 
-const FILE = process.argv[2] || './sms-export.xml';
+const FILE = process.argv[2] || './sms-export.xml'   // pass a path as argv[2];
 const stat = fs.statSync(FILE);
 console.log(`file: ${FILE}`);
 console.log(`size: ${(stat.size / 1024 / 1024 / 1024).toFixed(2)} GB`);
